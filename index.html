@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0d1017">
+  <title>Géo Quiz</title>
+  <meta name="description" content="Apprends les capitales, drapeaux et emplacements des pays du monde. Solo ou à plusieurs.">
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Géo Quiz">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" href="icons/icon-192.png">
+
+  <!-- Leaflet (mis en cache par le service worker pour le mode hors-ligne) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css?v=4">
+</head>
+<body>
+
+<!-- ======================= 0. Choix du mode ============================ -->
+<section id="screen-mode" class="screen">
+  <div class="hero">
+    <div class="hero-mark">🌍</div>
+    <h1>Géo Quiz</h1>
+    <p class="hero-sub">Capitale · Drapeau · Emplacement</p>
+  </div>
+  <h2 class="section-title">Comment veux-tu jouer ?</h2>
+  <div class="choice-grid one-col">
+    <button type="button" class="choice" id="modeSolo">
+      <span class="lbl">🙋 Solo</span>
+      <span class="sub">10 pays, un score sur 30, ton record est gardé</span>
+    </button>
+    <button type="button" class="choice" id="modeMulti">
+      <span class="lbl">👥 Multijoueur</span>
+      <span class="sub">2 à 6 joueurs sur le même téléphone · mêmes questions pour tous · classement final</span>
+    </button>
+  </div>
+  <p class="footnote" id="offlineHint"></p>
+</section>
+
+<!-- ======================= 0b. Réglage des joueurs ===================== -->
+<section id="screen-players" class="screen hidden">
+  <header class="topbar">
+    <button class="icon-btn" data-back="mode" aria-label="Retour">‹</button>
+    <span class="topbar-title">Multijoueur</span>
+    <span class="topbar-right"></span>
+  </header>
+
+  <div class="step-body">
+    <h2 class="section-title flush">Combien de joueurs ?</h2>
+    <div class="count-row" id="playerCount"></div>
+
+    <h2 class="section-title flush">Leurs noms</h2>
+    <div id="playerNames" class="player-names"></div>
+
+    <p class="map-hint">Tout le monde répondra exactement aux mêmes 10 questions, chacun son tour.</p>
+    <button type="button" class="btn primary block big" id="playersNext">Continuer →</button>
+  </div>
+</section>
+
+<!-- ======================= 1. Choix du continent ======================= -->
+<section id="screen-continent" class="screen hidden">
+  <header class="topbar">
+    <button class="icon-btn" data-back="depuisContinent" aria-label="Retour">‹</button>
+    <span class="topbar-title" id="continentTitle">Solo</span>
+    <span class="topbar-right"></span>
+  </header>
+  <h2 class="section-title">Choisis un continent</h2>
+  <div id="continentList" class="choice-grid"></div>
+</section>
+
+<!-- ======================= 2. Choix de la difficulté =================== -->
+<section id="screen-difficulty" class="screen hidden">
+  <header class="topbar">
+    <button class="icon-btn" data-back="continent" aria-label="Retour">‹</button>
+    <span id="diffTitle" class="topbar-title">Continent</span>
+    <span class="topbar-right"></span>
+  </header>
+  <h2 class="section-title">Choisis la difficulté</h2>
+  <div id="difficultyList" class="choice-grid one-col"></div>
+  <div id="bestScores" class="best-scores"></div>
+</section>
+
+<!-- ======================= 2b. Passage du téléphone ==================== -->
+<section id="screen-pass" class="screen hidden">
+  <div class="hero pass-hero">
+    <div class="hero-mark">📱</div>
+    <p class="hero-sub">Passe le téléphone à</p>
+    <h1 id="passName">Joueur</h1>
+    <p class="hero-sub" id="passSub"></p>
+  </div>
+  <div class="end-actions">
+    <button type="button" class="btn primary block big" id="passStart">C'est parti →</button>
+  </div>
+</section>
+
+<!-- ======================= 3. Étape 1 : la capitale ==================== -->
+<section id="screen-capital" class="screen hidden">
+  <header class="topbar">
+    <button class="icon-btn" data-back="quit" aria-label="Quitter">✕</button>
+    <span class="topbar-title" id="titleCapital">Étape 1/3 · Capitale</span>
+    <span class="topbar-right" id="progressCapital"></span>
+  </header>
+  <div class="progress"><div class="progress-fill" id="progressBar1"></div></div>
+
+  <div class="step-body">
+    <p class="prompt-label">Quelle est la capitale de</p>
+    <h2 class="country-name" id="capitalCountry">—</h2>
+
+    <form id="capitalForm" autocomplete="off">
+      <input type="text" id="capitalInput" class="text-input"
+             placeholder="Écris la capitale…"
+             autocomplete="off" autocorrect="off" autocapitalize="words"
+             spellcheck="false" enterkeyhint="go">
+      <button type="submit" class="btn primary block">Valider</button>
+      <button type="button" class="btn ghost block" id="capitalSkip">Je ne sais pas</button>
+    </form>
+  </div>
+</section>
+
+<!-- ======================= 4. Étape 2 : le drapeau ===================== -->
+<section id="screen-flag" class="screen hidden">
+  <header class="topbar">
+    <button class="icon-btn" data-back="quit" aria-label="Quitter">✕</button>
+    <span class="topbar-title" id="titleFlag">Étape 2/3 · Drapeau</span>
+    <span class="topbar-right" id="progressFlag"></span>
+  </header>
+  <div class="progress"><div class="progress-fill" id="progressBar2"></div></div>
+
+  <div class="step-body">
+    <p class="prompt-label">Quel est le drapeau de</p>
+    <h2 class="country-name" id="flagCountry">—</h2>
+    <div id="flagGrid" class="flag-grid"></div>
+    <button type="button" class="btn ghost block" id="flagSkip">Je ne sais pas</button>
+  </div>
+</section>
+
+<!-- ======================= 5. Étape 3 : la carte ======================= -->
+<section id="screen-map" class="screen hidden">
+  <header class="topbar">
+    <button class="icon-btn" data-back="quit" aria-label="Quitter">✕</button>
+    <span class="topbar-title" id="titleMap">Étape 3/3 · Carte</span>
+    <span class="topbar-right" id="progressMap"></span>
+  </header>
+  <div class="progress"><div class="progress-fill" id="progressBar3"></div></div>
+
+  <div class="map-head">
+    <p class="prompt-label">Où se trouve</p>
+    <h2 class="country-name small" id="mapCountry">—</h2>
+    <p class="map-continent" id="mapContinent"></p>
+  </div>
+
+  <div id="quizMap" class="map"></div>
+
+  <div class="map-actions">
+    <p class="map-hint" id="mapHint">Touche la carte à l'endroit du pays.</p>
+    <button type="button" class="btn primary block" id="mapValidate" disabled>Valider ma position</button>
+    <button type="button" class="btn ghost block" id="mapSkip">Je ne sais pas</button>
+  </div>
+</section>
+
+<!-- ======================= 6. Correction du tour ======================= -->
+<section id="screen-review" class="screen hidden">
+  <header class="topbar">
+    <button class="icon-btn" data-back="quit" aria-label="Quitter">✕</button>
+    <span class="topbar-title" id="reviewCountry">Correction</span>
+    <span class="topbar-right" id="reviewScore"></span>
+  </header>
+
+  <div class="step-body review">
+    <!-- Capitale -->
+    <div class="card" id="cardCapital">
+      <div class="card-head"><span class="card-icon">🏛️</span><h3>Capitale</h3><span class="verdict" id="capitalVerdict"></span></div>
+      <div class="compare">
+        <div class="compare-col">
+          <span class="compare-label">Ta réponse</span>
+          <span class="compare-value" id="capitalGiven">—</span>
+        </div>
+        <div class="compare-col">
+          <span class="compare-label">Bonne réponse</span>
+          <span class="compare-value good" id="capitalTruth">—</span>
+        </div>
+      </div>
+      <p class="note" id="capitalNote"></p>
+    </div>
+
+    <!-- Drapeau -->
+    <div class="card" id="cardFlag">
+      <div class="card-head"><span class="card-icon">🚩</span><h3>Drapeau</h3><span class="verdict" id="flagVerdict"></span></div>
+      <div class="compare">
+        <div class="compare-col">
+          <span class="compare-label">Ton choix</span>
+          <div class="flag-slot" id="flagGiven"></div>
+          <span class="flag-name" id="flagGivenName"></span>
+        </div>
+        <div class="compare-col">
+          <span class="compare-label">Bonne réponse</span>
+          <div class="flag-slot good" id="flagTruth"></div>
+          <span class="flag-name good" id="flagTruthName"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Carte -->
+    <div class="card" id="cardMap">
+      <div class="card-head"><span class="card-icon">📍</span><h3>Emplacement</h3><span class="verdict" id="mapVerdict"></span></div>
+      <div id="reviewMap" class="map review-map"></div>
+      <p class="distance" id="mapDistance"></p>
+      <p class="note" id="mapNote"></p>
+    </div>
+
+    <button type="button" class="btn primary block big" id="nextCountry">Pays suivant →</button>
+  </div>
+</section>
+
+<!-- ======================= 7. Fin de manche d'un joueur =============== -->
+<section id="screen-end" class="screen hidden">
+  <div class="hero">
+    <div class="hero-mark" id="endMark">🏆</div>
+    <h1 id="endTitle">Manche terminée</h1>
+    <p class="hero-sub" id="endSub"></p>
+  </div>
+  <div class="score-big" id="endScore">0/30</div>
+  <div class="score-detail" id="endDetail"></div>
+  <p class="map-hint tap-hint">Touche un pays pour revoir ta réponse</p>
+  <div id="endList" class="end-list"></div>
+  <div class="end-actions" id="endActions"></div>
+</section>
+
+<!-- ======================= 8. Classement multijoueur =================== -->
+<section id="screen-board" class="screen hidden">
+  <div class="hero">
+    <div class="hero-mark">🏆</div>
+    <h1>Classement</h1>
+    <p class="hero-sub" id="boardSub"></p>
+  </div>
+  <div id="boardList" class="board-list"></div>
+  <div class="end-actions">
+    <button type="button" class="btn primary block big" id="boardReplaySame">Rejouer la même série</button>
+    <button type="button" class="btn ghost block" id="boardNew">Nouvelle partie</button>
+  </div>
+</section>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="data/countries.js?v=4"></script>
+<script src="data/borders.js?v=4"></script>
+<script src="app.js?v=4"></script>
+</body>
+</html>
