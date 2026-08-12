@@ -4,23 +4,27 @@
    - fichiers de l'app (html/css/js) -> RÉSEAU D'ABORD, cache en secours.
      C'est ce qui évite le piège classique du SW qui fige une vieille version
      pour toujours : dès qu'il y a du réseau, l'utilisateur a le code à jour.
-   - ressources externes (Leaflet, drapeaux flagcdn, tuiles CARTO)
+   - ressources externes (Leaflet, drapeaux flagcdn)
      -> CACHE D'ABORD. Elles ne changent jamais et c'est ce qui rend le jeu
-     jouable hors-ligne sur les continents déjà parcourus.
+     jouable hors-ligne.
+     Les tuiles de fond ont disparu : les cartes sont désormais dessinées à
+     partir de data/borders.js, livré avec l'app.
 
    Pense à incrémenter CACHE_VERSION à chaque déploiement. */
 
-const CACHE_VERSION = "geo-quiz-v7";
+const CACHE_VERSION = "geo-quiz-v10";
 const CACHE_APP = CACHE_VERSION + "-app";
 const CACHE_EXT = CACHE_VERSION + "-ext";
 
 const FICHIERS_APP = [
   "./",
   "./index.html",
-  "./style.css?v=7",
-  "./app.js?v=7",
-  "./data/countries.js?v=7",
-  "./data/borders.js?v=7",
+  "./style.css?v=10",
+  "./app.js?v=10",
+  "./data/countries.js?v=10",
+  "./data/borders.js?v=10",
+  "./data/departements.js?v=10",
+  "./data/borders-fr.js?v=10",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

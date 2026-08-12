@@ -18,7 +18,7 @@
   const BORDS = window.GEO_BORDERS || {};
   const ROUND_SIZE = 10;      // pays par manche
   const FLAG_CHOICES = 6;     // taille de la grille de drapeaux
-  const MAX_JOUEURS = 6;
+  const MAX_JOUEURS = 8;
 
   const LEAFLET_OK = typeof window.L !== "undefined";
 
@@ -343,14 +343,58 @@
   //  Gestion des écrans
   // ============================================================
 
-  const ECRANS = ["mode", "players", "continent", "difficulty", "pass",
-                 "capital", "flag", "map", "review", "end", "board"];
+  const ECRANS = ["module", "mode", "explore", "players", "continent", "difficulty",
+                  "pass", "capital", "flag", "map", "review", "end", "board"];
 
   function showScreen(id) {
+    // Quitter une étape chronométrée doit arrêter le compte à rebours, sinon
+    // il continuerait de tourner et validerait un échec sur un autre écran.
+    if (!["capital", "flag", "map"].includes(id)) arreterChrono();
     ECRANS.forEach((e) => $("screen-" + e).classList.toggle("hidden", e !== id));
     $("screen-" + id).scrollTop = 0;
     if (id === "map") rafraichirCarte(quizMap);
     if (id === "review") rafraichirCarte(revMap);
+    if (id === "explore") rafraichirCarte(exploreMap);
+  }
+
+  // ============================================================
+  //  Chronomètre
+  // ============================================================
+
+  let chronoActif = false;
+  let chronoDuree = 10;
+  let chronoId = null;
+
+  function arreterChrono() {
+    if (chronoId) { clearTimeout(chronoId); chronoId = null; }
+    ["chronoBar1", "chronoBar2", "chronoBar3"].forEach((id) => $(id).classList.add("hidden"));
+  }
+
+  /* Un compte à rebours par ÉTAPE, pas par pays : sinon écrire une capitale
+     mangerait le temps de la question suivante.
+     Le tic tourne sur setTimeout et non requestAnimationFrame : rAF est gelé
+     dès que l'onglet passe en arrière-plan, la barre resterait figée. */
+  function lancerChrono(idBarre, surExpiration) {
+    arreterChrono();
+    // Curseur à 0 : l'utilisateur a laissé l'interrupteur mais retiré la
+    // limite. On ne lance rien plutôt que d'échouer instantanément.
+    if (!chronoActif || chronoDuree <= 0) return;
+
+    const boite = $(idBarre);
+    const jauge = boite.firstElementChild;
+    boite.classList.remove("hidden");
+    jauge.classList.remove("presse");
+
+    const duree = chronoDuree * 1000;
+    const fin = performance.now() + duree;
+    const tic = () => {
+      const reste = Math.max(0, fin - performance.now());
+      jauge.style.width = ((reste / duree) * 100).toFixed(1) + "%";
+      jauge.classList.toggle("presse", reste < duree * 0.25);
+      if (reste <= 0) { arreterChrono(); surExpiration(); return; }
+      chronoId = setTimeout(tic, 80);
+    };
+    tic();
   }
 
   function rafraichirCarte(map) {
@@ -369,8 +413,7 @@
   let modeChoisi = "solo";
   let nbJoueurs = 2;
   let nbQuestions = 10;            // multijoueur : réglable sur l'écran des joueurs
-  const CHOIX_QUESTIONS = [5, 10, 15, 20];
-  let nomsJoueurs = ["Joueur 1", "Joueur 2", "Joueur 3", "Joueur 4", "Joueur 5", "Joueur 6"];
+  let nomsJoueurs = Array.from({ length: 8 }, (_, i) => `Joueur ${i + 1}`);
   let contChoisi = null;
 
   const joueurCourant = () => partie.joueurs[partie.jIdx];
@@ -392,7 +435,7 @@
      pour tout le monde, sinon le multijoueur ne serait pas équitable. */
   function construireManche(cont, diff) {
     const pool = poolPays(cont.id, diff.maxLvl);
-    const voulu = modeChoisi === "multi" ? nbQuestions : ROUND_SIZE;
+    const voulu = nbQuestions;
     // Sans ce plafond, demander 20 questions sur un continent qui n'a que
     // 14 pays reposerait forcément la même question.
     const tirage = shuffle(pool).slice(0, Math.min(voulu, pool.length));
@@ -442,6 +485,7 @@
     $("capitalInput").value = "";
     showScreen("capital");
     $("capitalInput").focus();
+    lancerChrono("chronoBar1", () => validerCapitale(""));
   }
 
   function majEntetes() {
@@ -462,13 +506,14 @@
 
   /* Leurres de drapeaux : ressemblants en Difficile (même « famille » :
      nordiques, panafricains, tricolores…), volontairement différents en
-     Facile. */
+     Facile — et toujours du même continent que la bonne réponse. */
   function optionsDrapeaux(cible, pool, diff) {
-    let cands = pool.filter((p) => p.iso !== cible.iso);
-    if (cands.length < FLAG_CHOICES - 1) {
-      const vus = new Set(cands.map((p) => p.iso).concat(cible.iso));
-      cands = cands.concat(TOUS.filter((p) => !vus.has(p.iso)));
-    }
+    // Les leurres viennent TOUJOURS du continent du pays demandé, jamais
+    // d'ailleurs : un drapeau africain glissé dans une question sur l'Asie
+    // s'éliminait d'un coup d'œil, sans rien connaître.
+    // On pioche dans tout le continent, pas seulement dans les pays du niveau
+    // choisi, sinon en Facile il n'y aurait pas assez de candidats.
+    const cands = DATA.pays[cible.cont].filter((p) => p.iso !== cible.iso);
     const notes = cands.map((p) => {
       let s = Math.random();
       if (cible.f && p.f === cible.f) {
@@ -531,6 +576,7 @@
     });
 
     showScreen("flag");
+    lancerChrono("chronoBar2", () => validerDrapeau(null));
   }
 
   $("flagSkip").addEventListener("click", () => validerDrapeau(null));
@@ -545,15 +591,138 @@
   //  Étape 3 — la carte
   // ============================================================
 
-  let quizMap = null, quizSel = null;
-  let revMap = null, revCouches = null;
+  let quizMap = null, quizSel = null, quizFond = null;
+  let revMap = null, revCouches = null, revFond = null, revEtiq = null;
 
-  function fondDeCarte(avecNoms) {
-    const style = avecNoms ? "voyager" : "voyager_nolabels";
-    return L.tileLayer(
-      `https://{s}.basemaps.cartocdn.com/rastertiles/${style}/{z}/{x}/{y}{r}.png`,
-      { subdomains: "abcd", maxZoom: 12, attribution: "&copy; OpenStreetMap &copy; CARTO" }
+  const paysParIso = {};
+  TOUS.forEach((p) => { paysParIso[p.iso] = p; });
+
+  // ============================================================
+  //  Module France — données
+  // ============================================================
+
+  const FR = window.GEO_FRANCE || null;
+  const BORDS_FR = window.GEO_BORDERS_FR || null;
+
+  /* Point de référence d'un département, garanti DANS son contour.
+     On prend le centre de la boîte du plus gros morceau ; s'il tombe dehors
+     (départements en croissant, littoraux découpés), on balaie une grille et
+     on retient le point intérieur le plus éloigné des bords.
+     Calculé ici plutôt que saisi à la main : 101 couples de coordonnées écrits
+     au clavier seraient plus longs à produire et moins sûrs. */
+  function pointInterieur(multi) {
+    let boite = null, meilleureAire = -1;
+    multi.forEach((poly) => {
+      let x1 = 180, x2 = -180, y1 = 90, y2 = -90;
+      poly[0].forEach(([x, y]) => {
+        x1 = Math.min(x1, x); x2 = Math.max(x2, x);
+        y1 = Math.min(y1, y); y2 = Math.max(y2, y);
+      });
+      const aire = (x2 - x1) * (y2 - y1);
+      if (aire > meilleureAire) { meilleureAire = aire; boite = [x1, y1, x2, y2]; }
+    });
+    const cx = (boite[0] + boite[2]) / 2, cy = (boite[1] + boite[3]) / 2;
+    if (dansMulti(cx, cy, multi)) return { lat: cy, lng: cx };
+
+    let meilleur = null, meilleureMarge = -1;
+    const N = 25;
+    for (let i = 1; i < N; i++) {
+      for (let j = 1; j < N; j++) {
+        const x = boite[0] + ((boite[2] - boite[0]) * i) / N;
+        const y = boite[1] + ((boite[3] - boite[1]) * j) / N;
+        if (!dansMulti(x, y, multi)) continue;
+        const marge = Math.min(x - boite[0], boite[2] - x, y - boite[1], boite[3] - y);
+        if (marge > meilleureMarge) { meilleureMarge = marge; meilleur = { lat: y, lng: x }; }
+      }
+    }
+    return meilleur || { lat: cy, lng: cx };
+  }
+
+  if (FR && BORDS_FR) {
+    FR.departements.forEach((d) => {
+      const pt = pointInterieur(BORDS_FR[d.num]);
+      d.lat = pt.lat;
+      d.lng = pt.lng;
+    });
+  }
+
+  /* Point d'accroche d'une étiquette : le centre du PLUS GROS morceau du pays,
+     jamais le centre de sa boîte englobante. Les États-Unis vont des Aléoutiennes
+     à la Floride en traversant l'antiméridien : le centre de leur boîte tombait
+     au milieu de l'Atlantique, et « États-Unis » s'écrivait sur la France.
+     Même problème pour la Russie, et pour la France avec la Guyane. */
+  const ANCRE_ETIQ = {};
+  Object.keys(BORDS).forEach((iso) => {
+    // Largeur du plus gros morceau : sert uniquement à décider si le pays est
+    // assez grand à l'écran pour mériter une étiquette.
+    let largeur = 0;
+    BORDS[iso].forEach((poly) => {
+      let x1 = 180, x2 = -180;
+      poly[0].forEach(([x]) => { x1 = Math.min(x1, x); x2 = Math.max(x2, x); });
+      largeur = Math.max(largeur, x2 - x1);
+    });
+    // Position : le point de référence saisi à la main dans countries.js.
+    // Un centre géométrique tombe hors du pays dès qu'il est courbe ou étiré
+    // (Vietnam, Norvège, Japon) ; le point choisi à la main, lui, est dedans.
+    const p = paysParIso[iso];
+    ANCRE_ETIQ[iso] = { lat: p.lat, lng: p.lng, largeur };
+  });
+
+  /* Étiquettes des pays, dessinées par nos soins puisqu'il n'y a plus de
+     tuiles. On n'affiche que les pays assez larges à l'écran (sinon les noms
+     se chevauchent) et seulement ceux réellement dans la vue. */
+  function majEtiquettes(map, cont, groupe, avecCapitale) {
+    groupe.clearLayers();
+    const vue = map.getBounds();
+    const ouest = cont.bounds[0][1], est = cont.bounds[1][1];
+    const pxParDegre = (256 * Math.pow(2, map.getZoom())) / 360;
+    Object.keys(BORDS).forEach((iso) => {
+      const p = paysParIso[iso];
+      if (!p) return;
+      const a = ANCRE_ETIQ[iso];
+      if (a.largeur * pxParDegre < 46) return;
+      const centre = L.latLng(a.lat, lngDansFenetre(a.lng, ouest, est));
+      if (!vue.contains(centre)) return;
+      const contenu = avecCapitale
+        ? `<b>${echapper(p.n)}</b><i>${echapper(p.c)}</i>`
+        : `<b>${echapper(p.n)}</b>`;
+      L.tooltip({ permanent: true, direction: "center", className: "etiquette-pays", opacity: 1 })
+        .setLatLng(centre).setContent(contenu).addTo(groupe);
+    });
+  }
+
+  /* ---------- Fond de carte dessiné ----------
+     Plus aucune tuile : on trace nous-mêmes les contours déjà chargés.
+     Les tuiles étaient des images toutes faites, avec les limites régionales,
+     les routes et les zones urbaines cuites dans le pixel — impossible de les
+     retirer, alors qu'on ne veut QUE les frontières. Les dessiner nous-mêmes
+     donne en prime une carte sombre assortie à l'app, nette à tous les zooms,
+     et disponible dès le premier lancement sans réseau.
+     Rendu en canvas : 189 pays en SVG, le défilement devient poussif. */
+  const STYLE_TERRE = {
+    color: "#46586f", weight: 1, fillColor: "#1b2534", fillOpacity: 1,
+  };
+
+  const cacheFond = {};
+
+  /* Le cache est indexé par (usage, continent) et pas seulement par continent :
+     une couche Leaflet n'appartient qu'à UNE carte à la fois. Partager la même
+     instance entre la carte de question et celle de correction la faisait
+     sauter de l'une à l'autre — d'où des corrections affichées au mauvais
+     endroit du globe. */
+  function fondDeCarte(cont, usage) {
+    const cle = usage + ":" + cont.id;
+    if (cacheFond[cle]) return cacheFond[cle];
+    const traits = Object.keys(BORDS).map((iso) => ({
+      type: "Feature",
+      properties: { iso },
+      geometry: { type: "MultiPolygon", coordinates: coordsFenetre(BORDS[iso], cont) },
+    }));
+    cacheFond[cle] = L.geoJSON(
+      { type: "FeatureCollection", features: traits },
+      { style: STYLE_TERRE, interactive: false, renderer: L.canvas({ padding: 0.3 }) }
     );
+    return cacheFond[cle];
   }
 
   function pin(classe) {
@@ -607,7 +776,6 @@
       L.control.zoom({ position: "topright", zoomInTitle: "Zoomer", zoomOutTitle: "Dézoomer" })
         .addTo(quizMap);
       controleVueEnsemble().addTo(quizMap);
-      fondDeCarte(false).addTo(quizMap);
       quizSel = L.layerGroup().addTo(quizMap);
       quizMap.on("click", (e) => {
         tour.carte.latlng = e.latlng;
@@ -618,6 +786,16 @@
 
     quizSel.clearLayers();
 
+    // Le fond dépend du continent affiché (les longitudes sont recalées dans
+    // sa fenêtre), donc on échange la couche à chaque question.
+    const fond = fondDeCarte(contEffectif(), "quiz");
+    if (quizFond !== fond) {
+      if (quizFond) quizMap.removeLayer(quizFond);
+      fond.addTo(quizMap);
+      fond.bringToBack();
+      quizFond = fond;
+    }
+
     showScreen("map");
 
     // fitBounds n'est fiable qu'une fois le conteneur dimensionné. On cadre
@@ -626,6 +804,10 @@
     // appliqué donne une carte grise, sans aucune tuile.
     cadrerQuiz();
     setTimeout(cadrerQuiz, 180);
+    lancerChrono("chronoBar3", () => {
+      tour.carte = { latlng: null, dist: null, ok: false };
+      afficherCorrection();
+    });
   }
 
   /* Bouton « vue d'ensemble » : sans lui, un joueur zoomé sur un coin n'a
@@ -918,10 +1100,23 @@
       revMap = L.map("reviewMap", {
         zoomControl: true, attributionControl: false, worldCopyJump: false,
       });
-      fondDeCarte(true).addTo(revMap);
+      revEtiq = L.layerGroup().addTo(revMap);
       revCouches = L.layerGroup().addTo(revMap);
+      // Les noms sont recalculés à chaque déplacement : n'afficher que ce qui
+      // tient à l'écran évite la bouillie de texte quand on dézoome.
+      revMap.on("zoomend moveend", () => {
+        majEtiquettes(revMap, contEffectif(), revEtiq, false);
+      });
     }
     revCouches.clearLayers();
+
+    const fondRev = fondDeCarte(contEffectif(), "review");
+    if (revFond !== fondRev) {
+      if (revFond) revMap.removeLayer(revFond);
+      fondRev.addTo(revMap);
+      fondRev.bringToBack();
+      revFond = fondRev;
+    }
 
     const p = tour.pays;
     const cont = contEffectif();
@@ -969,7 +1164,8 @@
 
     const cadrer = () => {
       revMap.invalidateSize();
-      revMap.fitBounds(bounds.pad(0.25), { padding: [18, 18], maxZoom: 7 });
+      revMap.fitBounds(bounds.pad(0.25), { padding: [18, 18], maxZoom: 7, animate: false });
+      majEtiquettes(revMap, contEffectif(), revEtiq, false);
     };
     cadrer();
     setTimeout(cadrer, 180);
@@ -1188,42 +1384,163 @@
   //  Écrans d'accueil
   // ============================================================
 
+  $("moduleMonde").addEventListener("click", () => showScreen("mode"));
+
+  $("moduleFrance").addEventListener("click", () => {
+    const n = FR ? FR.departements.length : 0;
+    $("franceSub").textContent =
+      `Données prêtes (${n} départements, contours et préfectures). ` +
+      "Les écrans de jeu arrivent au prochain lot.";
+    $("moduleFrance").classList.add("bientot");
+  });
+
+  $("modeLibre").addEventListener("click", ouvrirEntrainement);
+
+  // Solo et multi passent désormais par le MÊME écran de réglages : le
+  // chronomètre est une option de partie, il n'avait rien à faire coincé sous
+  // la liste des difficultés.
   $("modeSolo").addEventListener("click", () => {
     modeChoisi = "solo";
-    $("continentTitle").textContent = "🙋 Solo";
-    afficherContinents();
+    ouvrirReglages();
   });
+
+  // ---------- Réglage du chronomètre ----------
+
+  function majReglageChrono() {
+    $("chronoOn").checked = chronoActif;
+    $("chronoDurations").classList.toggle("hidden", !chronoActif);
+    $("chronoRange").value = chronoDuree;
+    $("chronoRangeVal").textContent = chronoDuree === 0 ? "∞" : chronoDuree + " s";
+    $("chronoSub").textContent = !chronoActif
+      ? "Désactivé — prends ton temps"
+      : chronoDuree === 0
+        ? "Curseur à zéro : aucune limite"
+        : `${chronoDuree} s par étape · échec automatique à zéro`;
+  }
+
+  $("chronoOn").addEventListener("change", () => {
+    chronoActif = $("chronoOn").checked;
+    majReglageChrono();
+  });
+
+  /* Les trois réglages chiffrés passent par des curseurs : sur un téléphone
+     on ajuste au pouce, et la plage complète tient sans une rangée de boutons
+     par valeur possible (1 à 30 pays en aurait demandé trente). */
+  $("chronoRange").addEventListener("input", () => {
+    chronoDuree = +$("chronoRange").value;
+    majReglageChrono();
+  });
+
+  $("playerCount").addEventListener("input", () => {
+    nbJoueurs = +$("playerCount").value;
+    construireReglageJoueurs();
+  });
+
+  $("questionCount").addEventListener("input", () => {
+    nbQuestions = +$("questionCount").value;
+    construireReglageJoueurs();
+  });
+
+  // ---------- Entraînement libre ----------
+
+  let exploreMap = null, exploreEtiq = null, exploreFond = null, exploreSel = null;
+  const CONT_MONDE = () => DATA.continents.find((c) => c.id === "monde");
+
+  function ouvrirEntrainement() {
+    showScreen("explore");
+
+    if (!exploreMap) {
+      exploreMap = L.map("exploreMap", {
+        zoomControl: true, attributionControl: false,
+        worldCopyJump: false, zoomSnap: 0, maxBoundsViscosity: 1,
+      });
+      exploreFond = fondDeCarte(CONT_MONDE(), "explore");
+      exploreFond.addTo(exploreMap);
+      exploreEtiq = L.layerGroup().addTo(exploreMap);
+      exploreSel = L.layerGroup().addTo(exploreMap);
+
+      exploreMap.on("zoomend moveend", majEtiquettesLibre);
+      exploreMap.on("click", (e) => montrerFiche(e.latlng));
+    }
+
+    const cadrer = () => {
+      exploreMap.invalidateSize();
+      exploreMap.setMinZoom(0);
+      exploreMap.setMaxBounds(null);
+      exploreMap.fitBounds(L.latLngBounds(CONT_MONDE().bounds), { padding: [2, 2], animate: false });
+      const z = exploreMap.getZoom();
+      exploreMap.setMinZoom(z);
+      exploreMap.setMaxZoom(z + 5);
+      exploreMap.setMaxBounds(exploreMap.getBounds().pad(0.02));
+      majEtiquettesLibre();
+    };
+    cadrer();
+    setTimeout(cadrer, 180);
+  }
+
+  function majEtiquettesLibre() {
+    if (!exploreMap) return;
+    if (!$("explorePermanent").checked) { exploreEtiq.clearLayers(); return; }
+    majEtiquettes(exploreMap, CONT_MONDE(), exploreEtiq, true);
+  }
+
+  $("explorePermanent").addEventListener("change", majEtiquettesLibre);
+
+  /* Fiche d'un pays : nom, capitale, drapeau. Le pays touché est surligné,
+     comme pendant le quiz, pour qu'on sache de qui on parle. */
+  function montrerFiche(latlng) {
+    let iso = paysSous(latlng.lng, latlng.lat);
+    if (!iso) {
+      const proche = paysLePlusProche(latlng.lng, latlng.lat, MARGE_COTE_KM);
+      if (proche) iso = proche.iso;
+    }
+    exploreSel.clearLayers();
+    if (!iso) { exploreMap.closePopup(); return; }
+
+    const p = paysParIso[iso];
+    L.geoJSON(
+      { type: "Feature",
+        geometry: { type: "MultiPolygon", coordinates: coordsFenetre(BORDS[iso], CONT_MONDE()) } },
+      { style: { color: "#0f7a4f", weight: 2, fillColor: "#3ddc97", fillOpacity: 0.5 },
+        interactive: false }
+    ).addTo(exploreSel);
+
+    L.popup({ closeButton: true, autoPan: true, maxWidth: 260 })
+      .setLatLng(latlng)
+      .setContent(
+        `<div class="fiche">` +
+        `<img src="${flagUrl(p.iso, 320)}" alt="" onerror="this.remove()">` +
+        `<span><span class="nom">${echapper(p.n)}</span>` +
+        `<span class="cap">🏛️ ${echapper(p.c)}</span></span></div>`
+      )
+      .openOn(exploreMap);
+  }
 
   $("modeMulti").addEventListener("click", () => {
     modeChoisi = "multi";
-    construireReglageJoueurs();
-    showScreen("players");
+    ouvrirReglages();
   });
 
-  function construireReglageJoueurs() {
-    const zone = $("playerCount");
-    zone.innerHTML = "";
-    for (let n = 2; n <= MAX_JOUEURS; n++) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "count-btn" + (n === nbJoueurs ? " active" : "");
-      b.textContent = n;
-      b.addEventListener("click", () => { nbJoueurs = n; construireReglageJoueurs(); });
-      zone.appendChild(b);
-    }
+  function ouvrirReglages() {
+    const multi = modeChoisi === "multi";
+    $("reglagesTitle").textContent = multi ? "👥 Multijoueur" : "🙋 Solo";
+    $("blocJoueurs").classList.toggle("hidden", !multi);
+    $("blocNoms").classList.toggle("hidden", !multi);
+    construireReglageJoueurs();
+    showScreen("players");
+  }
 
-    const zoneQ = $("questionCount");
-    zoneQ.innerHTML = "";
-    CHOIX_QUESTIONS.forEach((n) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "count-btn" + (n === nbQuestions ? " active" : "");
-      b.textContent = n;
-      b.addEventListener("click", () => { nbQuestions = n; construireReglageJoueurs(); });
-      zoneQ.appendChild(b);
-    });
-    $("questionHint").textContent =
-      `${nbQuestions} pays × ${nbJoueurs} joueurs = ${nbQuestions * nbJoueurs} tours de jeu.`;
+  function construireReglageJoueurs() {
+    $("playerCount").max = MAX_JOUEURS;
+    $("playerCount").value = nbJoueurs;
+    $("playerCountVal").textContent = nbJoueurs;
+    $("questionCount").value = nbQuestions;
+    $("questionCountVal").textContent = nbQuestions;
+
+    $("questionHint").textContent = modeChoisi === "multi"
+      ? `${nbQuestions} pays × ${nbJoueurs} joueurs = ${nbQuestions * nbJoueurs} tours de jeu.`
+      : `${nbQuestions} pays, soit un score sur ${nbQuestions * 3}.`;
+    majReglageChrono();
 
     const noms = $("playerNames");
     noms.innerHTML = "";
@@ -1248,7 +1565,8 @@
     for (let i = 0; i < nbJoueurs; i++) {
       if (!nomsJoueurs[i] || !nomsJoueurs[i].trim()) nomsJoueurs[i] = `Joueur ${i + 1}`;
     }
-    $("continentTitle").textContent = `👥 ${nbJoueurs} joueurs`;
+    $("continentTitle").textContent = modeChoisi === "multi"
+      ? `👥 ${nbJoueurs} joueurs` : "🙋 Solo";
     afficherContinents();
   });
 
@@ -1311,7 +1629,7 @@
         if (partie && partie.idx > 0 && !confirm("Abandonner la manche en cours ?")) return;
         showScreen(contChoisi ? "difficulty" : "continent");
       } else if (cible === "depuisContinent") {
-        showScreen(modeChoisi === "multi" ? "players" : "mode");
+        showScreen("players");
       } else {
         showScreen(cible);
       }
@@ -1326,9 +1644,12 @@
     $("offlineHint").textContent =
       "⚠️ La carte n'a pas pu être chargée. Reconnecte-toi puis recharge la page.";
   } else {
+    // Les contours sont livrés avec l'app : seuls les drapeaux viennent du
+    // réseau maintenant que le fond de carte est dessiné ici.
     $("offlineHint").textContent =
-      "Le premier lancement a besoin d'internet (drapeaux et fond de carte). Ensuite l'app fonctionne hors-ligne.";
+      "Seules les images de drapeaux ont besoin d'internet au premier lancement. Les cartes, elles, sont embarquées.";
   }
+  majReglageChrono();
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     window.addEventListener("load", () => {

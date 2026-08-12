@@ -14,7 +14,17 @@ Puis un **écran de correction** : le bon pays est **colorié en vert** sur la
 carte, avec les noms des pays affichés et la possibilité de zoomer. Une manche
 fait 10 pays, notés sur 30.
 
-## Les deux modes
+## Deux modules
+
+L'app s'ouvre sur le choix du terrain de jeu :
+
+- **🌍 Géographie du Monde** — 189 pays, capitale / drapeau / emplacement.
+- **🇫🇷 Départements Français** — 101 départements. **En cours de construction**
+  (étape 2). Les contours sont validés et disponibles (source `france-geojson`,
+  DOM inclus, 3 635 Ko ramenés à 218 Ko), il reste à écrire les préfectures et
+  les régions, puis les deux sous-modes de quiz.
+
+## Les trois modes du module Monde
 
 - **Solo** — ton meilleur score est gardé par continent et par difficulté.
   En fin de manche : récapitulatif dépliable (touche un pays pour revoir tes
@@ -84,6 +94,18 @@ Puis ouvre <http://localhost:8765>. `Ctrl+C` pour arrêter.
 
 Aucune clé d'API, aucun build : c'est du HTML/CSS/JS servi tel quel.
 
+## Chronomètre
+
+Réglable sur l'écran de difficulté, pour le solo comme le multijoueur :
+interrupteur, puis **5, 10, 15 ou 30 secondes**. Une barre se vide au-dessus de
+la question et passe au rouge dans le dernier quart. À zéro, l'étape est
+validée en échec et on passe à la suivante.
+
+Le compte à rebours porte sur **chaque étape**, pas sur le pays entier : sinon
+écrire une capitale mangerait le temps du drapeau et de la carte. Il tourne sur
+`setTimeout` et non `requestAnimationFrame`, qui est gelé dès que l'onglet
+passe en arrière-plan — la barre resterait figée.
+
 ## Comment marche la notation
 
 ### Capitale
@@ -110,7 +132,23 @@ En *Difficile*, les 5 leurres sont choisis en priorité dans la même « famille
 que la bonne réponse (nordiques, panafricains, tricolores, croissant…).
 En *Facile*, c'est l'inverse.
 
+Dans tous les cas, **les 5 leurres viennent du même continent que le pays
+demandé**. Un drapeau africain glissé dans une question sur l'Asie s'éliminait
+d'un coup d'œil, sans rien connaître.
+
 ### Carte
+
+**Il n'y a plus aucune tuile.** Les cartes sont dessinées par l'app à partir de
+`data/borders.js`, en canvas. Les tuiles étaient des images toutes faites, avec
+les limites régionales, les routes et les zones urbaines cuites dans le pixel :
+impossible de les retirer alors qu'on ne veut que les frontières. Les dessiner
+nous-mêmes donne une carte sombre assortie au reste de l'app, nette à tous les
+zooms, et **disponible dès le premier lancement sans réseau** — seules les
+images de drapeaux dépendent encore d'internet. Coût mesuré : 51 à 114 ms pour
+construire le fond d'un continent, une seule fois puis mis en cache.
+
+Les **noms des pays** sont eux aussi dessinés par l'app, et n'apparaissent que
+lorsque le pays est assez large à l'écran — sinon les libellés se chevauchent.
 
 **Le zoom est autorisé, mais borné.** On ne peut pas dézoomer sous la vue du
 continent, ni zoomer au-delà de 3,5 niveaux (le fond se couvrirait de routes),

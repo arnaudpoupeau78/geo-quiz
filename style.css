@@ -94,6 +94,90 @@ body {
 }
 .icon-btn:active { background: var(--surface-2); }
 
+/* ---------- Interrupteur (chrono, affichage permanent) ---------- */
+.switch-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 16px 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+.switch-label { flex: 1; font-weight: 650; font-size: .95rem; }
+.switch-label small {
+  display: block;
+  font-weight: 400;
+  font-size: .78rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.switch { position: absolute; opacity: 0; pointer-events: none; }
+.switch-track {
+  flex: 0 0 auto;
+  position: relative;
+  width: 48px; height: 28px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  transition: background .18s ease;
+}
+.switch-track::after {
+  content: "";
+  position: absolute; top: 3px; left: 3px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform .18s ease, background .18s ease;
+}
+.switch:checked ~ .switch-track { background: var(--accent); border-color: var(--accent); }
+.switch:checked ~ .switch-track::after { transform: translateX(20px); background: #fff; }
+.switch:focus-visible ~ .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- Chronomètre ---------- */
+.chrono {
+  flex: 0 0 auto;
+  height: 6px;
+  margin: 2px 12px 4px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.chrono.hidden { display: none; }
+.chrono-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 4px;
+  background: var(--ok);
+  transition: background .3s linear;
+}
+.chrono-fill.presse { background: var(--ko); }
+
+/* ---------- Entraînement libre ---------- */
+.explore-hint { flex: 0 0 auto; padding: 10px 16px calc(16px + var(--safe-bottom)); margin: 0; }
+.choice.module { align-items: center; text-align: center; padding: 22px 16px; }
+.choice.module .emo { font-size: 2.4rem; }
+.choice.module .lbl { font-size: 1.15rem; }
+
+/* Fiche d'un pays en entraînement libre */
+.leaflet-popup-content-wrapper {
+  background: var(--surface);
+  color: var(--txt);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+}
+.leaflet-popup-tip { background: var(--surface); border: 1px solid var(--line); }
+.leaflet-popup-content { margin: 12px 14px; font-size: .9rem; }
+.leaflet-popup-close-button { color: var(--muted) !important; }
+.fiche { display: flex; align-items: center; gap: 12px; }
+.fiche img { width: 54px; height: 36px; object-fit: contain; border-radius: 4px; background: var(--surface-2); }
+.fiche .nom { font-weight: 700; font-size: 1rem; display: block; }
+.fiche .cap { color: var(--muted); font-size: .84rem; }
+
 /* ---------- Barre de progression ---------- */
 .progress {
   flex: 0 0 auto;
@@ -289,9 +373,8 @@ body {
   margin: 0 12px;
   border-radius: var(--radius);
   border: 1px solid var(--line);
-  /* Couleur d'attente proche du fond de carte clair, pour éviter un flash
-     sombre le temps que les tuiles arrivent. */
-  background: #d9e3ea;
+  /* La mer. Les contours sont dessinés par-dessus : plus aucune tuile. */
+  background: #0a121e;
   z-index: 0;
 }
 .map-actions { flex: 0 0 auto; padding: 8px 16px 16px; }
@@ -308,25 +391,43 @@ body {
   font-size: .82rem;
   color: var(--muted);
 }
-.leaflet-container { background: #d9e3ea; font-family: inherit; }
+.leaflet-container { background: #0a121e; font-family: inherit; }
+
+/* Étiquettes des pays, dessinées par l'app depuis qu'il n'y a plus de tuiles. */
+.etiquette-pays {
+  background: none; border: 0; box-shadow: none; padding: 0;
+  color: #e9edf5; font-size: 10px; line-height: 1.15;
+  text-align: center; white-space: nowrap; pointer-events: none;
+  text-shadow: 0 1px 3px #05090f, 0 0 2px #05090f;
+}
+.etiquette-pays::before { display: none; }
+.etiquette-pays b { display: block; font-weight: 650; }
+.etiquette-pays i { display: block; font-style: normal; font-size: 9px; color: #9fb0c6; }
 
 #quizMap, #quizMap .leaflet-grab, #quizMap .leaflet-interactive { cursor: crosshair; }
 
 /* Commandes de la carte : dimensionnées au doigt, pas à la souris. */
 #quizMap .leaflet-bar a {
   width: 38px; height: 38px; line-height: 38px;
-  font-size: 19px; color: #1d2634;
+  font-size: 19px;
 }
 #quizMap .leaflet-control-zoom { margin-top: 10px; margin-right: 10px; }
 #quizMap .vue-ensemble { margin-top: 8px; margin-right: 10px; }
 #quizMap .vue-ensemble a { font-size: 17px; }
 
 .leaflet-control-attribution {
-  background: rgba(255, 255, 255, .75) !important;
-  color: #5a6472 !important;
+  background: rgba(10, 18, 30, .8) !important;
+  color: #7c8798 !important;
   font-size: 9px !important;
 }
-.leaflet-control-attribution a { color: #3a4452 !important; }
+.leaflet-control-attribution a { color: #9fb0c6 !important; }
+
+/* Commandes Leaflet en sombre, la carte l'est devenue. */
+.leaflet-bar, .leaflet-bar a {
+  background: #1b2534; color: #e9edf5; border-color: #33425a;
+}
+.leaflet-bar a:hover, .leaflet-bar a:focus { background: #26344a; color: #fff; }
+.leaflet-bar a.leaflet-disabled { background: #141c28; color: #4a5568; }
 
 /* Marqueurs */
 .pin {
@@ -528,6 +629,73 @@ body {
 
 /* ---------- Réglage des joueurs ---------- */
 .section-title.flush { margin-left: 0; margin-right: 0; }
+
+/* ---------- Curseurs de réglage ---------- */
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.slider-row.hidden { display: none; }
+
+.slider-val {
+  flex: 0 0 auto;
+  min-width: 56px;
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.slider {
+  flex: 1;
+  min-width: 0;
+  height: 34px;              /* zone tactile confortable */
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+.slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.slider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+/* Pouce large : on vise au doigt, pas à la souris. */
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px; height: 26px;
+  margin-top: -11px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .5);
+}
+.slider::-moz-range-thumb {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .5);
+}
+.slider:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+/* Le bandeau de l'interrupteur doit s'aligner exactement sur le curseur
+   qu'il commande : mêmes marges, même largeur. */
+.switch-row.flush { margin-left: 0; margin-right: 0; }
 
 .count-row { display: flex; gap: 8px; }
 .count-btn {

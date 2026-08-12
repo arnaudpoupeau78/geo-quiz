@@ -18,51 +18,123 @@
 
   <!-- Leaflet (mis en cache par le service worker pour le mode hors-ligne) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 
-<!-- ======================= 0. Choix du mode ============================ -->
-<section id="screen-mode" class="screen">
+<!-- ======================= 0. Choix du module ========================== -->
+<section id="screen-module" class="screen">
   <div class="hero">
     <div class="hero-mark">🌍</div>
     <h1>Géo Quiz</h1>
-    <p class="hero-sub">Capitale · Drapeau · Emplacement</p>
+    <p class="hero-sub">Choisis ton terrain de jeu</p>
   </div>
+  <div class="choice-grid one-col">
+    <button type="button" class="choice module" id="moduleMonde">
+      <span class="emo">🌍</span>
+      <span class="lbl">Géographie du Monde</span>
+      <span class="sub">189 pays · capitale, drapeau et emplacement</span>
+    </button>
+    <button type="button" class="choice module" id="moduleFrance">
+      <span class="emo">🇫🇷</span>
+      <span class="lbl">Départements Français</span>
+      <span class="sub" id="franceSub">101 départements · nom, numéro et préfecture</span>
+    </button>
+  </div>
+  <p class="footnote" id="offlineHint"></p>
+</section>
+
+<!-- ======================= 0a. Choix du mode =========================== -->
+<section id="screen-mode" class="screen hidden">
+  <header class="topbar">
+    <button class="icon-btn" data-back="module" aria-label="Retour">‹</button>
+    <span class="topbar-title" id="modeTitle">Géographie du Monde</span>
+    <span class="topbar-right"></span>
+  </header>
   <h2 class="section-title">Comment veux-tu jouer ?</h2>
   <div class="choice-grid one-col">
     <button type="button" class="choice" id="modeSolo">
       <span class="lbl">🙋 Solo</span>
-      <span class="sub">10 pays, un score sur 30, ton record est gardé</span>
+      <span class="sub">Une série de pays, un score, ton record est gardé</span>
     </button>
     <button type="button" class="choice" id="modeMulti">
       <span class="lbl">👥 Multijoueur</span>
-      <span class="sub">2 à 6 joueurs sur le même téléphone · mêmes questions pour tous · classement final</span>
+      <span class="sub">2 à 8 joueurs sur le même téléphone · mêmes questions pour tous · classement final</span>
+    </button>
+    <button type="button" class="choice" id="modeLibre">
+      <span class="lbl">🧭 Entraînement libre</span>
+      <span class="sub">Explorer la carte sans score · noms, capitales et drapeaux à la demande</span>
     </button>
   </div>
-  <p class="footnote" id="offlineHint"></p>
+</section>
+
+<!-- ======================= 0c. Entraînement libre ====================== -->
+<section id="screen-explore" class="screen hidden">
+  <header class="topbar">
+    <button class="icon-btn" data-back="mode" aria-label="Retour">‹</button>
+    <span class="topbar-title">Entraînement libre</span>
+    <span class="topbar-right"></span>
+  </header>
+
+  <label class="switch-row">
+    <span class="switch-label">Affichage permanent
+      <small>Noms et capitales directement sur la carte</small>
+    </span>
+    <input type="checkbox" id="explorePermanent" class="switch">
+    <span class="switch-track" aria-hidden="true"></span>
+  </label>
+
+  <div id="exploreMap" class="map"></div>
+  <p class="map-hint explore-hint">Touche un pays pour voir sa capitale et son drapeau.</p>
 </section>
 
 <!-- ======================= 0b. Réglage des joueurs ===================== -->
 <section id="screen-players" class="screen hidden">
   <header class="topbar">
     <button class="icon-btn" data-back="mode" aria-label="Retour">‹</button>
-    <span class="topbar-title">Multijoueur</span>
+    <span class="topbar-title" id="reglagesTitle">Réglages</span>
     <span class="topbar-right"></span>
   </header>
 
   <div class="step-body">
-    <h2 class="section-title flush">Combien de joueurs ?</h2>
-    <div class="count-row" id="playerCount"></div>
+    <div id="blocJoueurs">
+      <h2 class="section-title flush">Combien de joueurs ?</h2>
+      <div class="slider-row">
+        <input type="range" class="slider" id="playerCount" min="2" max="8" step="1" value="2"
+               aria-label="Nombre de joueurs">
+        <output class="slider-val" id="playerCountVal">2</output>
+      </div>
+    </div>
 
-    <h2 class="section-title flush">Combien de pays ?</h2>
-    <div class="count-row" id="questionCount"></div>
+    <h2 class="section-title flush" id="titreNbQuestions">Combien de pays ?</h2>
+    <div class="slider-row">
+      <input type="range" class="slider" id="questionCount" min="1" max="30" step="1" value="10"
+             aria-label="Nombre de questions">
+      <output class="slider-val" id="questionCountVal">10</output>
+    </div>
     <p class="map-hint" id="questionHint"></p>
 
-    <h2 class="section-title flush">Leurs noms</h2>
-    <div id="playerNames" class="player-names"></div>
+    <div id="blocNoms">
+      <h2 class="section-title flush">Leurs noms</h2>
+      <div id="playerNames" class="player-names"></div>
+      <p class="map-hint">Tout le monde répond au même pays, chacun son tour, puis on passe au suivant.</p>
+    </div>
 
-    <p class="map-hint">Tout le monde répond au même pays, chacun son tour, puis on passe au suivant.</p>
+    <!-- Le chronomètre en dernier : c'est l'option la moins courante. -->
+    <h2 class="section-title flush">Chronomètre</h2>
+    <label class="switch-row flush">
+      <span class="switch-label">Limiter le temps
+        <small id="chronoSub">Désactivé</small>
+      </span>
+      <input type="checkbox" id="chronoOn" class="switch">
+      <span class="switch-track" aria-hidden="true"></span>
+    </label>
+    <div class="slider-row hidden" id="chronoDurations">
+      <input type="range" class="slider" id="chronoRange" min="0" max="45" step="5" value="10"
+             aria-label="Durée par étape en secondes">
+      <output class="slider-val" id="chronoRangeVal">10 s</output>
+    </div>
+
     <button type="button" class="btn primary block big" id="playersNext">Continuer →</button>
   </div>
 </section>
@@ -111,6 +183,7 @@
     <span class="topbar-right" id="progressCapital"></span>
   </header>
   <div class="progress"><div class="progress-fill" id="progressBar1"></div></div>
+  <div class="chrono hidden" id="chronoBar1"><div class="chrono-fill"></div></div>
 
   <div class="step-body">
     <p class="prompt-label">Quelle est la capitale de</p>
@@ -135,6 +208,7 @@
     <span class="topbar-right" id="progressFlag"></span>
   </header>
   <div class="progress"><div class="progress-fill" id="progressBar2"></div></div>
+  <div class="chrono hidden" id="chronoBar2"><div class="chrono-fill"></div></div>
 
   <div class="step-body">
     <p class="prompt-label">Quel est le drapeau de</p>
@@ -152,6 +226,7 @@
     <span class="topbar-right" id="progressMap"></span>
   </header>
   <div class="progress"><div class="progress-fill" id="progressBar3"></div></div>
+  <div class="chrono hidden" id="chronoBar3"><div class="chrono-fill"></div></div>
 
   <div class="map-head">
     <p class="prompt-label">Où se trouve</p>
@@ -255,8 +330,10 @@
 </section>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="data/countries.js?v=7"></script>
-<script src="data/borders.js?v=7"></script>
-<script src="app.js?v=7"></script>
+<script src="data/countries.js?v=10"></script>
+<script src="data/departements.js?v=10"></script>
+<script src="data/borders-fr.js?v=10"></script>
+<script src="data/borders.js?v=10"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>
