@@ -294,7 +294,14 @@ body {
   background: #d9e3ea;
   z-index: 0;
 }
-.map-actions { flex: 0 0 auto; padding: 10px 16px 20px; }
+.map-actions { flex: 0 0 auto; padding: 8px 16px 16px; }
+.action-row {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 10px;
+}
+/* Cibles tactiles : on gagne une rangée, pas de la surface de doigt. */
+.action-row .btn { margin: 0; min-height: 52px; }
 .map-hint {
   margin: 0 0 4px;
   text-align: center;
@@ -303,9 +310,16 @@ body {
 }
 .leaflet-container { background: #d9e3ea; font-family: inherit; }
 
-/* La carte de la question ne se déplace pas : le curseur doit dire
-   « clique ici », pas « attrape et fais glisser ». */
 #quizMap, #quizMap .leaflet-grab, #quizMap .leaflet-interactive { cursor: crosshair; }
+
+/* Commandes de la carte : dimensionnées au doigt, pas à la souris. */
+#quizMap .leaflet-bar a {
+  width: 38px; height: 38px; line-height: 38px;
+  font-size: 19px; color: #1d2634;
+}
+#quizMap .leaflet-control-zoom { margin-top: 10px; margin-right: 10px; }
+#quizMap .vue-ensemble { margin-top: 8px; margin-right: 10px; }
+#quizMap .vue-ensemble a { font-size: 17px; }
 
 .leaflet-control-attribution {
   background: rgba(255, 255, 255, .75) !important;

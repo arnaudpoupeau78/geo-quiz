@@ -112,6 +112,13 @@ En *Facile*, c'est l'inverse.
 
 ### Carte
 
+**Le zoom est autorisé, mais borné.** On ne peut pas dézoomer sous la vue du
+continent, ni zoomer au-delà de 3,5 niveaux (le fond se couvrirait de routes),
+ni faire glisser la carte hors du cadre de départ. Un bouton **⤢** ramène à la
+vue d'ensemble. C'est le compromis entre la carte libre du début — où l'on se
+perdait — et la carte totalement figée : depuis que la validation est binaire,
+atteindre un petit pays demande de pouvoir s'approcher.
+
 La carte **prend la forme du continent affiché** : sa largeur est calculée à
 partir de sa hauteur disponible et des proportions du continent. Sans ça,
 `fitBounds` garde bien tout le continent visible mais comble le vide en

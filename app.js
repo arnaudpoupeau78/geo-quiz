@@ -573,7 +573,7 @@
   function afficherCarte() {
     $("mapCountry").textContent = tour.pays.n;
     $("mapValidate").disabled = true;
-    $("mapHint").textContent = "Touche la carte à l'endroit du pays.";
+    $("mapHint").textContent = "Touche le pays. Pince pour zoomer.";
     // En « Monde entier », on annonce le continent affiché : la carte se cadre
     // dessus, autant l'assumer plutôt que de laisser deviner.
     $("mapContinent").textContent =
@@ -591,11 +591,22 @@
       // Carte FIGÉE : tout le continent est visible, on ne peut ni déplacer
       // ni zoomer, on clique. zoomSnap:0 autorise un zoom fractionnaire, donc
       // le continent remplit exactement le cadre au lieu de laisser des marges.
+      /* Zoom et déplacement autorisés, mais BORNÉS (voir cadrerQuiz) : on ne
+         peut ni dézoomer sous la vue du continent, ni sortir de ce cadre.
+         C'est ce qui règle le reproche d'origine — la carte libre où on se
+         perdait — tout en rendant les petits pays atteignables, ce qui est
+         devenu indispensable depuis que la validation est binaire.
+         Le double-tap reste désactivé : il entrerait en conflit avec le tap
+         qui sélectionne un pays. */
       quizMap = L.map("quizMap", {
-        zoomControl: false, dragging: false, touchZoom: false,
-        scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false,
-        keyboard: false, inertia: false, worldCopyJump: false, zoomSnap: 0,
+        zoomControl: false, dragging: true, touchZoom: true,
+        scrollWheelZoom: true, doubleClickZoom: false, boxZoom: false,
+        keyboard: false, worldCopyJump: false, zoomSnap: 0,
+        maxBoundsViscosity: 1,
       });
+      L.control.zoom({ position: "topright", zoomInTitle: "Zoomer", zoomOutTitle: "Dézoomer" })
+        .addTo(quizMap);
+      controleVueEnsemble().addTo(quizMap);
       fondDeCarte(false).addTo(quizMap);
       quizSel = L.layerGroup().addTo(quizMap);
       quizMap.on("click", (e) => {
@@ -615,6 +626,27 @@
     // appliqué donne une carte grise, sans aucune tuile.
     cadrerQuiz();
     setTimeout(cadrerQuiz, 180);
+  }
+
+  /* Bouton « vue d'ensemble » : sans lui, un joueur zoomé sur un coin n'a
+     aucun moyen évident de revenir au continent entier. */
+  function controleVueEnsemble() {
+    const Ctrl = L.Control.extend({
+      options: { position: "topright" },
+      onAdd() {
+        const boite = L.DomUtil.create("div", "leaflet-bar vue-ensemble");
+        const a = L.DomUtil.create("a", "", boite);
+        a.href = "#";
+        a.textContent = "⤢";
+        a.title = "Revenir à la vue d'ensemble";
+        a.setAttribute("role", "button");
+        a.setAttribute("aria-label", "Revenir à la vue d'ensemble");
+        L.DomEvent.on(a, "click", (e) => { L.DomEvent.stop(e); cadrerQuiz(); });
+        L.DomEvent.disableClickPropagation(boite);
+        return boite;
+      },
+    });
+    return new Ctrl();
   }
 
   /* Proportions du continent une fois projeté (largeur / hauteur à l'écran). */
@@ -648,7 +680,26 @@
       el.style.marginRight = "auto";
     }
     quizMap.invalidateSize();
-    quizMap.fitBounds(L.latLngBounds(cont.bounds), { padding: [2, 2] });
+    // On desserre les bornes avant de recadrer, sinon les limites de la
+    // question précédente empêcheraient le nouveau cadrage.
+    quizMap.setMinZoom(0);
+    quizMap.setMaxZoom(20);
+    quizMap.setMaxBounds(null);
+    // `animate: false` est indispensable : un fitBounds animé n'applique le
+    // nouveau zoom qu'à la fin de l'animation, or on le relit juste après pour
+    // en déduire les bornes. Avec l'animation, le bouton « vue d'ensemble »
+    // recalculait les limites à partir du zoom courant et restait bloqué au
+    // niveau où on se trouvait.
+    quizMap.fitBounds(L.latLngBounds(cont.bounds), { padding: [2, 2], animate: false });
+
+    // Bornes du zoom : on ne dézoome jamais sous la vue du continent, et on
+    // s'arrête avant que le fond de carte ne se couvre de routes.
+    const z = quizMap.getZoom();
+    quizMap.setMinZoom(z);
+    quizMap.setMaxZoom(z + 3.5);
+    // Le garde-fou de déplacement est EXACTEMENT la vue obtenue : impossible
+    // de dériver, et aucun conflit avec le cadrage qu'on vient de poser.
+    quizMap.setMaxBounds(quizMap.getBounds().pad(0.02));
   }
 
   // Rotation du téléphone ou fenêtre redimensionnée : il faut recadrer,
