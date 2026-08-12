@@ -127,22 +127,35 @@
      Facile et pas en Difficile. */
   function jugerCapitale(saisie, pays, diff) {
     const rep = norm(saisie);
-    if (!rep) return { ok: false, fautes: null, marge: null };
+    if (!rep) return { ok: false, fautes: null, marge: null, autre: null };
 
     const variantes = [rep, sansArticle(rep)];
-    let meilleur = { fautes: Infinity, marge: 0 };
+    // `aussi` = autres réponses légitimes qu'on ASSUME à l'écran (La Paz pour
+    // la Bolivie). `alt` = simples variantes d'orthographe qu'on accepte en
+    // silence (« beijing », « kyiv »).
+    const candidats = [{ txt: pays.c, autre: null }]
+      .concat((pays.aussi || []).map((t) => ({ txt: t, autre: t })))
+      .concat((pays.alt || []).map((t) => ({ txt: t, autre: null })));
 
-    for (const attendue of [pays.c].concat(pays.alt || []).map(norm)) {
+    let meilleur = { fautes: Infinity, marge: 0, autre: null };
+
+    for (const cand of candidats) {
+      const attendue = norm(cand.txt);
       for (const cible of [attendue, sansArticle(attendue)]) {
         if (!cible) continue;
         const marge = fautesTolerees(diff.fautes, cible.length);
         for (const r of variantes) {
           const d = levenshtein(r, cible);
-          if (d < meilleur.fautes) meilleur = { fautes: d, marge };
+          if (d < meilleur.fautes) meilleur = { fautes: d, marge, autre: cand.autre };
         }
       }
     }
-    return { ok: meilleur.fautes <= meilleur.marge, fautes: meilleur.fautes, marge: meilleur.marge };
+    return {
+      ok: meilleur.fautes <= meilleur.marge,
+      fautes: meilleur.fautes, marge: meilleur.marge,
+      // Renseigné seulement si c'est une AUTRE capitale qui a été reconnue.
+      autre: meilleur.fautes <= meilleur.marge ? meilleur.autre : null,
+    };
   }
 
   function formatDistance(km) {
@@ -272,6 +285,24 @@
      20 km, c'est moins d'un pixel à l'échelle d'un continent. */
   const MARGE_COTE_KM = 20;
 
+  /* Pays le plus proche d'un clic tombé sur l'eau, dans la limite donnée.
+     Sert à l'aperçu de sélection, pour qu'il montre exactement ce que la
+     notation retiendra. */
+  function paysLePlusProche(lng, lat, maxKm) {
+    const x = normLng(lng);
+    const d = maxKm / 100 + 0.1;
+    let meilleur = null;
+    for (const iso of Object.keys(BORDS)) {
+      const b = BBOX[iso];
+      if (x < b[0] - d || x > b[2] + d || lat < b[1] - d || lat > b[3] + d) continue;
+      const r = distanceAuPays(lng, lat, iso);
+      if (r && r.dist <= maxKm && (!meilleur || r.dist < meilleur.dist)) {
+        meilleur = { iso, dist: r.dist };
+      }
+    }
+    return meilleur;
+  }
+
   /* Un autre pays est-il plus proche du clic que celui visé ? Sert à ne pas
      offrir un clic en mer à un pays quand le voisin est plus près. */
   function unAutrePaysPlusProche(lng, lat, distCible, isoCible) {
@@ -337,6 +368,8 @@
   let tour = null;
   let modeChoisi = "solo";
   let nbJoueurs = 2;
+  let nbQuestions = 10;            // multijoueur : réglable sur l'écran des joueurs
+  const CHOIX_QUESTIONS = [5, 10, 15, 20];
   let nomsJoueurs = ["Joueur 1", "Joueur 2", "Joueur 3", "Joueur 4", "Joueur 5", "Joueur 6"];
   let contChoisi = null;
 
@@ -359,7 +392,10 @@
      pour tout le monde, sinon le multijoueur ne serait pas équitable. */
   function construireManche(cont, diff) {
     const pool = poolPays(cont.id, diff.maxLvl);
-    const tirage = shuffle(pool).slice(0, Math.min(ROUND_SIZE, pool.length));
+    const voulu = modeChoisi === "multi" ? nbQuestions : ROUND_SIZE;
+    // Sans ce plafond, demander 20 questions sur un continent qui n'a que
+    // 14 pays reposerait forcément la même question.
+    const tirage = shuffle(pool).slice(0, Math.min(voulu, pool.length));
     return tirage.map((pays) => ({ pays, options: optionsDrapeaux(pays, pool, diff) }));
   }
 
@@ -371,19 +407,19 @@
         .map((nom) => ({ nom, score: 0, resultats: [] })),
       jIdx: 0, idx: 0,
     };
-    demarrerJoueur();
+    if (partie.mode === "multi") passerLaMain();
+    else demarrerTour();
   }
 
-  function demarrerJoueur() {
-    partie.idx = 0;
-    if (partie.mode === "multi") {
-      $("passName").textContent = joueurCourant().nom;
-      $("passSub").textContent =
-        `Joueur ${partie.jIdx + 1} sur ${partie.joueurs.length} · ${partie.cont.nom} · ${partie.diff.nom}`;
-      showScreen("pass");
-    } else {
-      demarrerTour();
-    }
+  /* Multijoueur : on tourne QUESTION par question, pas joueur par joueur.
+     Tout le monde répond au pays n°1, puis tout le monde au pays n°2, etc.
+     Personne n'attend donc que le voisin ait fini sa manche entière. */
+  function passerLaMain() {
+    $("passName").textContent = joueurCourant().nom;
+    $("passSub").textContent =
+      `Question ${partie.idx + 1} sur ${partie.manche.length} · ` +
+      `joueur ${partie.jIdx + 1} sur ${partie.joueurs.length}`;
+    showScreen("pass");
   }
 
   $("passStart").addEventListener("click", demarrerTour);
@@ -458,7 +494,7 @@
   function validerCapitale(saisie) {
     $("capitalInput").blur();
     const j = jugerCapitale(saisie, tour.pays, partie.diff);
-    tour.capitale = { saisie: saisie.trim(), ok: j.ok, fautes: j.fautes, marge: j.marge };
+    tour.capitale = { saisie: saisie.trim(), ok: j.ok, fautes: j.fautes, marge: j.marge, autre: j.autre };
     afficherDrapeaux();
   }
 
@@ -509,7 +545,7 @@
   //  Étape 3 — la carte
   // ============================================================
 
-  let quizMap = null, quizMarker = null;
+  let quizMap = null, quizSel = null;
   let revMap = null, revCouches = null;
 
   function fondDeCarte(avecNoms) {
@@ -561,16 +597,15 @@
         keyboard: false, inertia: false, worldCopyJump: false, zoomSnap: 0,
       });
       fondDeCarte(false).addTo(quizMap);
+      quizSel = L.layerGroup().addTo(quizMap);
       quizMap.on("click", (e) => {
-        if (quizMarker) quizMarker.setLatLng(e.latlng);
-        else quizMarker = L.marker(e.latlng, { icon: pin("user") }).addTo(quizMap);
         tour.carte.latlng = e.latlng;
+        montrerSelection(e.latlng);
         $("mapValidate").disabled = false;
-        $("mapHint").textContent = "Tu peux déplacer ton marqueur en re-cliquant.";
       });
     }
 
-    if (quizMarker) { quizMap.removeLayer(quizMarker); quizMarker = null; }
+    quizSel.clearLayers();
 
     showScreen("map");
 
@@ -578,12 +613,96 @@
     // tout de suite puis à nouveau après un court délai : requestAnimationFrame
     // ne se déclenche pas dans un onglet en arrière-plan, et un cadrage jamais
     // appliqué donne une carte grise, sans aucune tuile.
-    const cadrer = () => {
-      quizMap.invalidateSize();
-      quizMap.fitBounds(L.latLngBounds(contEffectif().bounds), { padding: [2, 2] });
-    };
-    cadrer();
-    setTimeout(cadrer, 180);
+    cadrerQuiz();
+    setTimeout(cadrerQuiz, 180);
+  }
+
+  /* Proportions du continent une fois projeté (largeur / hauteur à l'écran). */
+  function formeContinent(cont) {
+    const [[sud, ouest], [nord, est]] = cont.bounds;
+    const a = L.CRS.EPSG3857.latLngToPoint(L.latLng(nord, ouest), 8);
+    const b = L.CRS.EPSG3857.latLngToPoint(L.latLng(sud, est), 8);
+    return Math.abs(b.x - a.x) / Math.abs(b.y - a.y);
+  }
+
+  /* La carte prend la FORME du continent affiché avant d'être cadrée.
+     fitBounds garantit que tout le continent est visible, mais si le cadre
+     est plus large que le continent, il comble le vide en longitude : sur une
+     fenêtre courte, demander l'Asie affichait 167° au lieu de 120°, donc
+     l'Europe et l'Afrique en prime, et l'Asie deux fois plus petite.
+     En ajustant la largeur, le continent remplit exactement le cadre. */
+  function cadrerQuiz() {
+    const cont = contEffectif();
+    const el = $("quizMap");
+    // Remettre AUSSI les marges : `margin: auto` annule l'étirement du
+    // conteneur flex, donc mesurer sans les enlever renvoyait la largeur du
+    // contenu — c'est-à-dire zéro — et la carte restait large de 1 pixel.
+    el.style.width = "";
+    el.style.marginLeft = "";
+    el.style.marginRight = "";
+    const r = el.getBoundingClientRect();
+    if (r.height > 0) {
+      const large = Math.min(r.width, Math.max(200, r.height * formeContinent(cont)));
+      el.style.width = Math.round(large) + "px";
+      el.style.marginLeft = "auto";
+      el.style.marginRight = "auto";
+    }
+    quizMap.invalidateSize();
+    quizMap.fitBounds(L.latLngBounds(cont.bounds), { padding: [2, 2] });
+  }
+
+  // Rotation du téléphone ou fenêtre redimensionnée : il faut recadrer,
+  // sinon la carte garde la largeur calculée pour l'ancienne forme d'écran.
+  let minuteurRedim = null;
+  window.addEventListener("resize", () => {
+    if ($("screen-map").classList.contains("hidden") || !quizMap) return;
+    clearTimeout(minuteurRedim);
+    minuteurRedim = setTimeout(cadrerQuiz, 150);
+  });
+
+  /* Retour visuel du clic : on colorie en entier le pays touché, plutôt que
+     de poser un point. Le joueur voit donc exactement ce qu'il s'apprête à
+     valider — sur la carte muette, un point ne disait rien.
+     Le nom du pays n'est évidemment jamais affiché ici. */
+  function montrerSelection(latlng) {
+    quizSel.clearLayers();
+    let iso = paysSous(latlng.lng, latlng.lat);
+    let auLarge = false;
+
+    // Tombé sur l'eau : on désigne la côte la plus proche, exactement comme
+    // le fera la notation. Sans ça, cliquer sur Monaco ou sur un estuaire
+    // affichait « tu as touché la mer » alors que le clic allait être compté
+    // bon — l'aperçu doit dire la vérité.
+    if (!iso) {
+      const proche = paysLePlusProche(latlng.lng, latlng.lat, MARGE_COTE_KM);
+      if (proche) { iso = proche.iso; auLarge = true; }
+    }
+
+    if (!iso) {
+      L.marker(latlng, { icon: pin("user") }).addTo(quizSel);
+      $("mapHint").textContent = "Tu es en pleine mer. Re-clique pour changer.";
+      return;
+    }
+
+    const coords = coordsFenetre(BORDS[iso], contEffectif());
+    L.geoJSON(
+      { type: "Feature", geometry: { type: "MultiPolygon", coordinates: coords } },
+      { style: { color: "#0f7a4f", weight: 2, fillColor: "#3ddc97", fillOpacity: 0.55 },
+        interactive: false }
+    ).addTo(quizSel);
+
+    // Un micro-État colorié reste invisible : on le cercle pour qu'on sache
+    // qu'on l'a bien attrapé.
+    const bb = BBOX[iso];
+    if (Math.max(bb[2] - bb[0], bb[3] - bb[1]) < 3) {
+      L.circleMarker(latlng, {
+        radius: 10, color: "#0f7a4f", weight: 3,
+        fillColor: "#3ddc97", fillOpacity: 0.35, interactive: false,
+      }).addTo(quizSel);
+    }
+    $("mapHint").textContent = auLarge
+      ? "Au large : c'est la côte la plus proche qui compte. Re-clique pour changer."
+      : "Pays sélectionné. Re-clique pour changer.";
   }
 
   $("mapValidate").addEventListener("click", () => {
@@ -671,8 +790,7 @@
     $("mapDistance").className = "distance " + (indispo ? "" : tour.carte.ok ? "ok" : "ko");
     $("mapNote").textContent = noteCarte;
 
-    $("nextCountry").textContent =
-      partie.idx + 1 >= partie.manche.length ? "Voir le résultat →" : "Pays suivant →";
+    $("nextCountry").textContent = texteBoutonSuivant();
 
     showScreen("review");
     dessinerCorrectionCarte();
@@ -681,6 +799,12 @@
   function texteNoteCapitale() {
     const c = tour.capitale;
     if (c.fautes === null) return "";
+    // Sans ça, répondre « La Paz » pour la Bolivie affichait une coche verte
+    // au-dessus de « Bonne réponse : Sucre » — on avait l'air de se tromper
+    // tout en ayant juste.
+    if (c.ok && c.autre) {
+      return `« ${c.autre} » compte aussi pour ce pays.`;
+    }
     if (c.ok && c.fautes > 0) {
       return `Accepté : ${c.fautes} faute${c.fautes > 1 ? "s" : ""} de frappe, ` +
              `la marge en ${partie.diff.nom} est de ${c.marge}.`;
@@ -801,10 +925,36 @@
   }
 
   $("nextCountry").addEventListener("click", () => {
-    partie.idx++;
-    if (partie.idx >= partie.manche.length) finJoueur();
-    else demarrerTour();
+    if (partie.mode === "solo") {
+      partie.idx++;
+      if (partie.idx >= partie.manche.length) finJoueur();
+      else demarrerTour();
+      return;
+    }
+    // Multi : joueur suivant sur la MÊME question, puis on avance d'un pays.
+    if (partie.jIdx + 1 < partie.joueurs.length) {
+      partie.jIdx++;
+    } else {
+      partie.jIdx = 0;
+      partie.idx++;
+      if (partie.idx >= partie.manche.length) { afficherClassement(); return; }
+    }
+    passerLaMain();
   });
+
+  /* Libellé du bouton de la correction : en multi il annonce qui prend la
+     main, sinon on ne sait pas s'il faut passer le téléphone. */
+  function texteBoutonSuivant() {
+    if (partie.mode === "solo") {
+      return partie.idx + 1 >= partie.manche.length ? "Voir le résultat →" : "Pays suivant →";
+    }
+    if (partie.jIdx + 1 < partie.joueurs.length) {
+      return `Au tour ${deNom(partie.joueurs[partie.jIdx + 1].nom)} →`;
+    }
+    return partie.idx + 1 >= partie.manche.length
+      ? "Voir le classement 🏆"
+      : `Pays suivant · au tour ${deNom(partie.joueurs[0].nom)} →`;
+  }
 
   // ============================================================
   //  Fin de manche d'un joueur
@@ -828,16 +978,16 @@
     return false;
   }
 
+  // Écran de fin de manche : solo uniquement. En multi, la dernière question
+  // du dernier joueur enchaîne directement sur le classement.
   function finJoueur() {
     const j = joueurCourant();
     const total = partie.manche.length * 3;
     const pct = j.score / total;
-    const record = partie.mode === "solo"
-      ? ecrireRecord(partie.cont.id, partie.diff.id, j.score, total) : false;
+    const record = ecrireRecord(partie.cont.id, partie.diff.id, j.score, total);
 
     $("endMark").textContent = pct >= 0.9 ? "🏆" : pct >= 0.6 ? "🎉" : pct >= 0.3 ? "💪" : "🌱";
-    $("endTitle").textContent = partie.mode === "multi"
-      ? j.nom : record ? "Nouveau record !" : "Manche terminée";
+    $("endTitle").textContent = record ? "Nouveau record !" : "Manche terminée";
     $("endSub").textContent = `${partie.cont.nom} · ${partie.diff.nom}`;
     $("endScore").textContent = `${j.score}/${total}`;
 
@@ -847,15 +997,14 @@
       `🚩 ${nb("drapeau")}/${partie.manche.length}   ` +
       `📍 ${nb("carte")}/${partie.manche.length}`;
 
-    remplirRecap(j.resultats);
+    construireRecap(j.resultats, $("endList"));
     remplirActionsFin();
     showScreen("end");
   }
 
   /* Récapitulatif dépliable : une ligne par pays, on touche pour voir le
      détail de ses trois réponses. */
-  function remplirRecap(resultats) {
-    const liste = $("endList");
+  function construireRecap(resultats, liste) {
     liste.innerHTML = "";
 
     resultats.forEach((r) => {
@@ -921,20 +1070,11 @@
       zone.appendChild(b);
     };
 
-    if (partie.mode === "multi") {
-      const dernier = partie.jIdx + 1 >= partie.joueurs.length;
-      bouton(dernier ? "Voir le classement 🏆" : `Au tour ${deNom(partie.joueurs[partie.jIdx + 1].nom)} →`,
-        "primary", () => {
-          if (dernier) afficherClassement();
-          else { partie.jIdx++; demarrerJoueur(); }
-        });
-    } else {
-      bouton("Rejouer (nouveaux pays)", "primary", () =>
-        nouvellePartie(partie.cont, partie.diff));
-      bouton("Rejouer la même série", "ghost", () =>
-        nouvellePartie(partie.cont, partie.diff, partie.manche));
-      bouton("Changer de continent", "ghost", () => showScreen("continent"));
-    }
+    bouton("Rejouer (nouveaux pays)", "primary", () =>
+      nouvellePartie(partie.cont, partie.diff));
+    bouton("Rejouer la même série", "ghost", () =>
+      nouvellePartie(partie.cont, partie.diff, partie.manche));
+    bouton("Changer de continent", "ghost", () => showScreen("continent"));
   }
 
   // ============================================================
@@ -956,15 +1096,34 @@
       const medaille = rang === "1" ? "🥇" : rang === "2" ? "🥈" : rang === "3" ? "🥉" : `${rang}ᵉ`;
       const nb = (k) => j.resultats.filter((r) => r[k]).length;
 
-      const row = document.createElement("div");
+      // Chaque ligne se déplie sur le détail des réponses du joueur : avec la
+      // boucle question par question, plus personne ne voit d'écran de fin
+      // individuel, ce récap serait perdu autrement.
+      const bloc = document.createElement("div");
+      bloc.className = "board-item";
+      bloc.dataset.rang = rang;
+
+      const row = document.createElement("button");
+      row.type = "button";
       row.className = "board-row" + (rang === "1" ? " winner" : "");
-      row.dataset.rang = rang;
       row.innerHTML =
         `<span class="board-rank">${medaille}</span>` +
         `<span class="board-name">${echapper(j.nom)}</span>` +
         `<span class="board-detail">🏛️${nb("capitale")} 🚩${nb("drapeau")} 📍${nb("carte")}</span>` +
-        `<span class="board-score">${j.score}<small>/${total}</small></span>`;
-      liste.appendChild(row);
+        `<span class="board-score">${j.score}<small>/${total}</small></span>` +
+        `<span class="chevron">▾</span>`;
+
+      const detail = document.createElement("div");
+      detail.className = "end-list board-recap hidden";
+      construireRecap(j.resultats, detail);
+
+      row.addEventListener("click", () => {
+        const ouvert = !detail.classList.toggle("hidden");
+        bloc.classList.toggle("open", ouvert);
+      });
+
+      bloc.append(row, detail);
+      liste.appendChild(bloc);
     });
 
     showScreen("board");
@@ -1001,6 +1160,19 @@
       b.addEventListener("click", () => { nbJoueurs = n; construireReglageJoueurs(); });
       zone.appendChild(b);
     }
+
+    const zoneQ = $("questionCount");
+    zoneQ.innerHTML = "";
+    CHOIX_QUESTIONS.forEach((n) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "count-btn" + (n === nbQuestions ? " active" : "");
+      b.textContent = n;
+      b.addEventListener("click", () => { nbQuestions = n; construireReglageJoueurs(); });
+      zoneQ.appendChild(b);
+    });
+    $("questionHint").textContent =
+      `${nbQuestions} pays × ${nbJoueurs} joueurs = ${nbQuestions * nbJoueurs} tours de jeu.`;
 
     const noms = $("playerNames");
     noms.innerHTML = "";

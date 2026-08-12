@@ -18,7 +18,7 @@
 
   <!-- Leaflet (mis en cache par le service worker pour le mode hors-ligne) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -55,10 +55,14 @@
     <h2 class="section-title flush">Combien de joueurs ?</h2>
     <div class="count-row" id="playerCount"></div>
 
+    <h2 class="section-title flush">Combien de pays ?</h2>
+    <div class="count-row" id="questionCount"></div>
+    <p class="map-hint" id="questionHint"></p>
+
     <h2 class="section-title flush">Leurs noms</h2>
     <div id="playerNames" class="player-names"></div>
 
-    <p class="map-hint">Tout le monde répondra exactement aux mêmes 10 questions, chacun son tour.</p>
+    <p class="map-hint">Tout le monde répond au même pays, chacun son tour, puis on passe au suivant.</p>
     <button type="button" class="btn primary block big" id="playersNext">Continuer →</button>
   </div>
 </section>
@@ -247,8 +251,8 @@
 </section>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="data/countries.js?v=4"></script>
-<script src="data/borders.js?v=4"></script>
-<script src="app.js?v=4"></script>
+<script src="data/countries.js?v=6"></script>
+<script src="data/borders.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

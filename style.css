@@ -557,6 +557,13 @@ body {
   border-radius: var(--radius);
   background: var(--surface);
 }
+/* Ligne de classement dépliable */
+.board-item { display: flex; flex-direction: column; }
+.board-item .board-row { width: 100%; font: inherit; text-align: left; cursor: pointer; }
+.board-item .chevron { color: var(--muted); transition: transform .18s ease; flex: 0 0 auto; }
+.board-item.open .chevron { transform: rotate(180deg); }
+.board-recap { padding: 6px 0 10px; }
+
 .board-row.winner { border-color: rgba(255, 212, 59, .55); background: var(--surface-2); }
 .board-rank { font-size: 1.2rem; min-width: 30px; }
 .board-name {

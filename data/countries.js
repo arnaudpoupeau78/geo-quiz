@@ -17,7 +17,12 @@
           Indispensable pour les pays immenses ou très étirés : avec un seul
           point au centre, cliquer sur la Sibérie ou le nord du Chili était
           compté faux alors que le clic tombait bien sur le pays.
-     alt  (optionnel) autres réponses acceptées pour la capitale
+     aussi (optionnel) AUTRES capitales légitimes, acceptées et ANNONCÉES dans
+          la correction (Sucre / La Paz). Sans ça, répondre « La Paz » pour la
+          Bolivie affichait une coche verte au-dessus de « Bonne réponse :
+          Sucre » : on avait l'air de s'être trompé tout en ayant juste.
+     alt  (optionnel) simples variantes d'orthographe, acceptées en silence
+          (« beijing », « kyiv », « washington dc »)
      f    (optionnel) "famille" de drapeau : sert à choisir des leurres
           ressemblants en difficulté Difficile (et différents en Facile)
 */
@@ -49,7 +54,7 @@ window.GEO_DATA = {
         pts: [[51.5, -0.1], [53.5, -2.2], [55.9, -3.2], [54.6, -5.9], [52.5, -2.0], [57.5, -4.2]] },
       { n: "Irlande", c: "Dublin", iso: "ie", lat: 53.2, lng: -8.0, lvl: 1, r: 150, f: "tri-v" },
       { n: "Belgique", c: "Bruxelles", iso: "be", lat: 50.6, lng: 4.6, lvl: 1, r: 98, f: "tri-v" },
-      { n: "Pays-Bas", c: "Amsterdam", iso: "nl", lat: 52.2, lng: 5.5, lvl: 1, r: 104, alt: ["la haye", "den haag"], f: "tri-h" },
+      { n: "Pays-Bas", c: "Amsterdam", iso: "nl", lat: 52.2, lng: 5.5, lvl: 1, r: 104, aussi: ["La Haye"], alt: ["den haag"], f: "tri-h" },
       { n: "Luxembourg", c: "Luxembourg", iso: "lu", lat: 49.8, lng: 6.1, lvl: 2, r: 28, f: "tri-h" },
       { n: "Suisse", c: "Berne", iso: "ch", lat: 46.8, lng: 8.2, lvl: 1, r: 114 },
       { n: "Autriche", c: "Vienne", iso: "at", lat: 47.6, lng: 14.1, lvl: 1, r: 163, f: "tri-h" },
@@ -119,7 +124,7 @@ window.GEO_DATA = {
       { n: "Bangladesh", c: "Dacca", iso: "bd", lat: 23.8, lng: 90.3, lvl: 2, r: 214, alt: ["dhaka"] },
       { n: "Népal", c: "Katmandou", iso: "np", lat: 28.3, lng: 84.1, lvl: 2, r: 218 },
       { n: "Bhoutan", c: "Thimphou", iso: "bt", lat: 27.4, lng: 90.4, lvl: 3, r: 112 },
-      { n: "Sri Lanka", c: "Colombo", iso: "lk", lat: 7.8, lng: 80.7, lvl: 2, r: 143, alt: ["sri jayawardenepura kotte", "kotte"] },
+      { n: "Sri Lanka", c: "Colombo", iso: "lk", lat: 7.8, lng: 80.7, lvl: 2, r: 143, aussi: ["Sri Jayawardenepura Kotte"], alt: ["kotte"] },
       { n: "Maldives", c: "Malé", iso: "mv", lat: 3.2, lng: 73.2, lvl: 3, r: 12, f: "croissant" },
       { n: "Afghanistan", c: "Kaboul", iso: "af", lat: 33.9, lng: 66.0, lvl: 2, r: 350 },
       { n: "Iran", c: "Téhéran", iso: "ir", lat: 32.5, lng: 54.0, lvl: 1, r: 450, f: "tri-h",
@@ -134,7 +139,7 @@ window.GEO_DATA = {
       { n: "Oman", c: "Mascate", iso: "om", lat: 21.0, lng: 57.0, lvl: 2, r: 280, f: "arabe" },
       { n: "Yémen", c: "Sanaa", iso: "ye", lat: 15.5, lng: 47.5, lvl: 2, r: 274, f: "tri-h" },
       { n: "Jordanie", c: "Amman", iso: "jo", lat: 31.2, lng: 36.5, lvl: 2, r: 168, f: "arabe" },
-      { n: "Israël", c: "Jérusalem", iso: "il", lat: 31.4, lng: 35.0, lvl: 1, r: 79, alt: ["tel aviv"] },
+      { n: "Israël", c: "Jérusalem", iso: "il", lat: 31.4, lng: 35.0, lvl: 1, r: 79, aussi: ["Tel-Aviv"] },
       { n: "Liban", c: "Beyrouth", iso: "lb", lat: 33.9, lng: 35.9, lvl: 2, r: 57 },
       { n: "Syrie", c: "Damas", iso: "sy", lat: 35.0, lng: 38.5, lvl: 2, r: 243, f: "tri-h" },
       { n: "Turquie", c: "Ankara", iso: "tr", lat: 39.0, lng: 35.0, lvl: 1, r: 350, f: "croissant",
@@ -156,9 +161,9 @@ window.GEO_DATA = {
         pts: [[21.0, 105.8], [16.0, 108.2], [10.8, 106.7], [12.7, 108.1], [9.2, 105.8]] },
       { n: "Laos", c: "Vientiane", iso: "la", lat: 18.5, lng: 103.8, lvl: 3, r: 250 },
       { n: "Cambodge", c: "Phnom Penh", iso: "kh", lat: 12.6, lng: 104.9, lvl: 2, r: 239 },
-      { n: "Birmanie", c: "Naypyidaw", iso: "mm", lat: 21.0, lng: 96.5, lvl: 2, r: 320, alt: ["nay pyi taw", "rangoun", "yangon"],
+      { n: "Birmanie", c: "Naypyidaw", iso: "mm", lat: 21.0, lng: 96.5, lvl: 2, r: 320, aussi: ["Rangoun"], alt: ["nay pyi taw", "yangon"],
         pts: [[19.8, 96.1], [16.8, 96.2], [21.9, 96.1], [25.4, 97.4], [16.5, 94.7]] },
-      { n: "Malaisie", c: "Kuala Lumpur", iso: "my", lat: 4.2, lng: 102.0, lvl: 1, r: 220, alt: ["putrajaya"], f: "etoiles-bandes",
+      { n: "Malaisie", c: "Kuala Lumpur", iso: "my", lat: 4.2, lng: 102.0, lvl: 1, r: 220, aussi: ["Putrajaya"], f: "etoiles-bandes",
         pts: [[3.1, 101.7], [5.4, 100.3], [1.5, 110.3], [5.9, 116.1], [2.2, 102.3]] },
       { n: "Singapour", c: "Singapour", iso: "sg", lat: 1.35, lng: 103.82, lvl: 1, r: 15, f: "croissant" },
       { n: "Indonésie", c: "Jakarta", iso: "id", lat: -2.5, lng: 118.0, lvl: 1, r: 350, f: "bi-h",
@@ -191,9 +196,9 @@ window.GEO_DATA = {
         pts: [[2.0, 45.3], [9.6, 44.1], [11.3, 49.2], [4.0, 43.6], [7.0, 47.5]] },
       { n: "Kenya", c: "Nairobi", iso: "ke", lat: 0.5, lng: 37.9, lvl: 1, r: 380, f: "panafricain" },
       { n: "Ouganda", c: "Kampala", iso: "ug", lat: 1.3, lng: 32.4, lvl: 2, r: 253 },
-      { n: "Tanzanie", c: "Dodoma", iso: "tz", lat: -6.3, lng: 35.0, lvl: 1, r: 400, alt: ["dar es salaam"] },
+      { n: "Tanzanie", c: "Dodoma", iso: "tz", lat: -6.3, lng: 35.0, lvl: 1, r: 400, aussi: ["Dar es Salaam"] },
       { n: "Rwanda", c: "Kigali", iso: "rw", lat: -1.95, lng: 29.9, lvl: 2, r: 89 },
-      { n: "Burundi", c: "Gitega", iso: "bi", lat: -3.4, lng: 29.9, lvl: 3, r: 93, alt: ["bujumbura"] },
+      { n: "Burundi", c: "Gitega", iso: "bi", lat: -3.4, lng: 29.9, lvl: 3, r: 93, aussi: ["Bujumbura"] },
       { n: "République démocratique du Congo", c: "Kinshasa", iso: "cd", lat: -2.9, lng: 23.6, lvl: 1, r: 450,
         pts: [[-4.3, 15.3], [-6.1, 23.6], [-11.7, 27.5], [0.5, 25.2], [2.2, 21.0], [-5.0, 29.0], [-1.7, 19.0]] },
       { n: "Congo", c: "Brazzaville", iso: "cg", lat: -0.8, lng: 15.8, lvl: 2, r: 300, f: "panafricain" },
@@ -208,10 +213,10 @@ window.GEO_DATA = {
         pts: [[13.5, 2.1], [13.8, 9.0], [17.0, 8.0], [20.5, 11.5], [16.9, 7.0]] },
       { n: "Nigeria", c: "Abuja", iso: "ng", lat: 9.1, lng: 8.7, lvl: 1, r: 380, f: "tri-v",
         pts: [[9.1, 7.4], [6.5, 3.4], [12.0, 8.5], [4.8, 7.0], [11.8, 13.0], [10.3, 9.8]] },
-      { n: "Bénin", c: "Porto-Novo", iso: "bj", lat: 9.3, lng: 2.3, lvl: 2, r: 189, alt: ["cotonou"], f: "panafricain" },
+      { n: "Bénin", c: "Porto-Novo", iso: "bj", lat: 9.3, lng: 2.3, lvl: 2, r: 189, aussi: ["Cotonou"], f: "panafricain" },
       { n: "Togo", c: "Lomé", iso: "tg", lat: 8.6, lng: 1.0, lvl: 2, r: 134, f: "panafricain" },
       { n: "Ghana", c: "Accra", iso: "gh", lat: 7.9, lng: -1.0, lvl: 1, r: 276, f: "panafricain" },
-      { n: "Côte d'Ivoire", c: "Yamoussoukro", iso: "ci", lat: 7.5, lng: -5.5, lvl: 1, r: 300, alt: ["abidjan"], f: "tri-v" },
+      { n: "Côte d'Ivoire", c: "Yamoussoukro", iso: "ci", lat: 7.5, lng: -5.5, lvl: 1, r: 300, aussi: ["Abidjan"], f: "tri-v" },
       { n: "Liberia", c: "Monrovia", iso: "lr", lat: 6.4, lng: -9.4, lvl: 2, r: 178, f: "etoiles-bandes" },
       { n: "Sierra Leone", c: "Freetown", iso: "sl", lat: 8.5, lng: -11.8, lvl: 2, r: 151, f: "tri-h" },
       { n: "Guinée", c: "Conakry", iso: "gn", lat: 10.4, lng: -10.9, lvl: 2, r: 277, f: "tri-v" },
@@ -233,10 +238,10 @@ window.GEO_DATA = {
         pts: [[-25.9, 32.6], [-19.8, 34.9], [-15.1, 39.3], [-13.0, 35.0], [-22.0, 34.0]] },
       { n: "Namibie", c: "Windhoek", iso: "na", lat: -22.0, lng: 17.0, lvl: 2, r: 400 },
       { n: "Botswana", c: "Gaborone", iso: "bw", lat: -22.2, lng: 24.0, lvl: 2, r: 400 },
-      { n: "Afrique du Sud", c: "Pretoria", iso: "za", lat: -29.0, lng: 25.0, lvl: 1, r: 400, alt: ["le cap", "cape town", "bloemfontein"],
+      { n: "Afrique du Sud", c: "Pretoria", iso: "za", lat: -29.0, lng: 25.0, lvl: 1, r: 400, aussi: ["Le Cap", "Bloemfontein"], alt: ["cape town"],
         pts: [[-25.7, 28.2], [-33.9, 18.4], [-29.9, 31.0], [-26.2, 28.0], [-33.0, 26.0], [-28.7, 24.8]] },
       { n: "Lesotho", c: "Maseru", iso: "ls", lat: -29.6, lng: 28.3, lvl: 3, r: 98 },
-      { n: "Eswatini", c: "Mbabane", iso: "sz", lat: -26.5, lng: 31.5, lvl: 3, r: 74, alt: ["lobamba"] },
+      { n: "Eswatini", c: "Mbabane", iso: "sz", lat: -26.5, lng: 31.5, lvl: 3, r: 74, aussi: ["Lobamba"] },
       { n: "Madagascar", c: "Antananarivo", iso: "mg", lat: -19.0, lng: 46.7, lvl: 1, r: 300,
         pts: [[-18.9, 47.5], [-12.3, 49.3], [-23.4, 43.7], [-15.7, 46.3], [-25.0, 46.9]] },
       { n: "Maurice", c: "Port-Louis", iso: "mu", lat: -20.3, lng: 57.55, lvl: 2, r: 25 },
@@ -286,7 +291,7 @@ window.GEO_DATA = {
         pts: [[-15.8, -47.9], [-23.5, -46.6], [-22.9, -43.2], [-12.9, -38.5], [-8.0, -34.9],
               [-3.1, -60.0], [-1.5, -48.5], [-30.0, -51.2], [-25.4, -49.3], [-16.7, -49.3],
               [-9.6, -35.7], [-20.0, -44.0], [-5.8, -35.2], [-15.6, -56.1]] },
-      { n: "Bolivie", c: "Sucre", iso: "bo", lat: -17.0, lng: -64.5, lvl: 2, r: 420, alt: ["la paz"], f: "tri-h" },
+      { n: "Bolivie", c: "Sucre", iso: "bo", lat: -17.0, lng: -64.5, lvl: 2, r: 420, aussi: ["La Paz"], f: "tri-h" },
       { n: "Paraguay", c: "Asuncion", iso: "py", lat: -23.4, lng: -58.4, lvl: 2, r: 357, f: "tri-h" },
       { n: "Uruguay", c: "Montevideo", iso: "uy", lat: -32.8, lng: -56.0, lvl: 2, r: 239, f: "etoiles-bandes" },
       { n: "Chili", c: "Santiago", iso: "cl", lat: -35.0, lng: -71.0, lvl: 1, r: 280, f: "etoiles-bandes",

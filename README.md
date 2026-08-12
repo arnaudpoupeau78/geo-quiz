@@ -20,10 +20,15 @@ fait 10 pays, notés sur 30.
   En fin de manche : récapitulatif dépliable (touche un pays pour revoir tes
   trois réponses), et le choix entre rejouer de nouveaux pays ou **rejouer
   exactement la même série**.
-- **Multijoueur** — 2 à 6 joueurs, chacun son tour sur le même téléphone.
-  Tout le monde reçoit **les mêmes 10 pays et les mêmes grilles de drapeaux**,
-  donc la comparaison est juste. Un écran « passe le téléphone à… » sépare les
-  joueurs, et un **classement** conclut la partie.
+- **Multijoueur** — 2 à 6 joueurs sur le même téléphone, et **5, 10, 15 ou 20
+  pays** au choix. Tout le monde reçoit **les mêmes pays et les mêmes grilles
+  de drapeaux**, donc la comparaison est juste.
+
+  Le tour se joue **pays par pays, pas joueur par joueur** : tout le monde
+  répond au pays n°1, puis tout le monde au pays n°2, etc. Personne n'attend
+  donc que le voisin ait terminé sa manche entière. Un écran « passe le
+  téléphone à… » sépare chaque joueur, et un **classement** conclut la partie —
+  chaque ligne se déplie sur le détail des réponses de ce joueur.
 
 Aucun compte, aucun serveur, aucune base de données : tout se passe dans la
 page. C'est aussi pour ça que le multijoueur est « en local » — jouer chacun
@@ -107,6 +112,19 @@ En *Facile*, c'est l'inverse.
 
 ### Carte
 
+La carte **prend la forme du continent affiché** : sa largeur est calculée à
+partir de sa hauteur disponible et des proportions du continent. Sans ça,
+`fitBounds` garde bien tout le continent visible mais comble le vide en
+longitude — sur une fenêtre large et courte, demander l'Asie affichait 167° au
+lieu de 120°, donc l'Europe et l'Afrique en prime et l'Asie deux fois plus
+petite. La carte est aussi recadrée quand on tourne le téléphone.
+
+Au clic, **le pays touché se colorie entièrement en vert**, selon ses vrais
+contours : on voit donc ce qu'on s'apprête à valider avant d'appuyer, ce qu'un
+simple point ne disait pas sur une carte muette. Le nom, lui, reste caché. Un
+clic sur l'eau désigne la côte la plus proche — exactement ce que la notation
+retiendra — ou affiche « tu es en pleine mer » s'il n'y a rien à moins de 20 km.
+
 **La règle est binaire, et identique pour toutes les difficultés : le clic est
 dans le pays, ou il ne l'est pas.** Le clic est testé contre le contour réel
 (point-dans-polygone), pas contre une distance.
@@ -162,7 +180,17 @@ affiché sur chaque bouton.
 { n: "France", c: "Paris", iso: "fr", lat: 46.6, lng: 2.4, lvl: 1, r: 330, f: "tri-v" },
 ```
 
-- `n`, `c` : nom et capitale en français · `alt` : autres capitales acceptées.
+- `n`, `c` : nom et capitale en français.
+- `aussi` : **autres capitales légitimes**, acceptées *et annoncées* dans la
+  correction (Sucre + La Paz, Amsterdam + La Haye, Pretoria + Le Cap…).
+- `alt` : simples variantes d'orthographe, acceptées **en silence**
+  (`beijing`, `kyiv`, `washington dc`).
+
+  La distinction compte : répondre « La Paz » pour la Bolivie affichait une
+  coche verte juste au-dessus de « Bonne réponse : Sucre ». On avait l'air de
+  s'être trompé tout en ayant juste. Maintenant la correction ajoute
+  « La Paz » compte aussi pour ce pays. Aucune note en revanche pour
+  « Beijing », qui n'est qu'une autre façon d'écrire Pékin.
 - `iso` : code à 2 lettres — sert au drapeau **et** au contour.
 - `lvl` : 1 très connu, 2 moyen, 3 pointu.
 - `f` : famille de drapeau, pour les leurres en Difficile.
@@ -223,6 +251,10 @@ s'affichent à la place.
 - Les capitales sont saisies à la main : une erreur se corrige en une ligne.
 - 22 pays font moins de 2 pixels sur la carte de leur continent : l'étape carte
   y est une loterie. C'est le prix de la règle binaire, assumé.
+- En multijoueur, la correction d'un pays s'affiche avant que le joueur suivant
+  ne réponde au même pays. L'écran « passe le téléphone » la masque, mais rien
+  n'empêche de regarder par-dessus l'épaule — c'est le principe du jeu à un
+  seul téléphone.
 - Monaco et le Vatican ne sont pas correctement identifiés par « tu as cliqué
   sur… » : leurs contours Natural Earth sont des blocs approximatifs, décalés
   de quelques centaines de mètres.
