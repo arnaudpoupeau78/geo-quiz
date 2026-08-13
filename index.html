@@ -18,7 +18,7 @@
 
   <!-- Leaflet (mis en cache par le service worker pour le mode hors-ligne) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="style.css?v=10">
+  <link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 
@@ -78,14 +78,18 @@
 
   <label class="switch-row">
     <span class="switch-label">Affichage permanent
-      <small>Noms et capitales directement sur la carte</small>
+      <small id="explorePermanentSub">Noms et capitales directement sur la carte</small>
     </span>
     <input type="checkbox" id="explorePermanent" class="switch">
     <span class="switch-track" aria-hidden="true"></span>
   </label>
 
+  <!-- Métropole et DOM : un cadre par territoire, ils sont trop éloignés
+       pour tenir sur une même carte lisible. -->
+  <div class="cadre-row hidden" id="exploreCadres"></div>
+
   <div id="exploreMap" class="map"></div>
-  <p class="map-hint explore-hint">Touche un pays pour voir sa capitale et son drapeau.</p>
+  <p class="map-hint explore-hint" id="exploreHint">Touche un pays pour voir sa capitale et son drapeau.</p>
 </section>
 
 <!-- ======================= 0b. Réglage des joueurs ===================== -->
@@ -146,8 +150,29 @@
     <span class="topbar-title" id="continentTitle">Solo</span>
     <span class="topbar-right"></span>
   </header>
-  <h2 class="section-title">Choisis un continent</h2>
+  <h2 class="section-title" id="continentTitre">Choisis un continent</h2>
   <div id="continentList" class="choice-grid"></div>
+</section>
+
+<!-- ============ 1b. Sous-mode du quiz France ========================== -->
+<section id="screen-submode" class="screen hidden">
+  <header class="topbar">
+    <button class="icon-btn" data-back="continent" aria-label="Retour">‹</button>
+    <span class="topbar-title" id="submodeTitle">Région</span>
+    <span class="topbar-right"></span>
+  </header>
+  <h2 class="section-title">Que veux-tu deviner ?</h2>
+  <div class="choice-grid one-col">
+    <button type="button" class="choice" id="subParNumero">
+      <span class="lbl">🔢 Trouver par numéro</span>
+      <span class="sub">On te donne <b>33</b> · tu écris « Gironde », puis tu le places sur la carte</span>
+    </button>
+    <button type="button" class="choice" id="subParNom">
+      <span class="lbl">🔤 Trouver par nom</span>
+      <span class="sub">On te donne <b>Gironde</b> · tu écris « 33 », puis tu le places sur la carte</span>
+    </button>
+  </div>
+  <div id="bestScoresFr" class="best-scores"></div>
 </section>
 
 <!-- ======================= 2. Choix de la difficulté =================== -->
@@ -186,7 +211,7 @@
   <div class="chrono hidden" id="chronoBar1"><div class="chrono-fill"></div></div>
 
   <div class="step-body">
-    <p class="prompt-label">Quelle est la capitale de</p>
+    <p class="prompt-label" id="capitalLabel">Quelle est la capitale de</p>
     <h2 class="country-name" id="capitalCountry">—</h2>
 
     <form id="capitalForm" autocomplete="off">
@@ -258,7 +283,7 @@
   <div class="step-body review">
     <!-- Capitale -->
     <div class="card" id="cardCapital">
-      <div class="card-head"><span class="card-icon">🏛️</span><h3>Capitale</h3><span class="verdict" id="capitalVerdict"></span></div>
+      <div class="card-head"><span class="card-icon">🏛️</span><h3 id="capitalCardTitle">Capitale</h3><span class="verdict" id="capitalVerdict"></span></div>
       <div class="compare">
         <div class="compare-col">
           <span class="compare-label">Ta réponse</span>
@@ -330,10 +355,10 @@
 </section>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="data/countries.js?v=10"></script>
-<script src="data/departements.js?v=10"></script>
-<script src="data/borders-fr.js?v=10"></script>
-<script src="data/borders.js?v=10"></script>
-<script src="app.js?v=10"></script>
+<script src="data/countries.js?v=12"></script>
+<script src="data/departements.js?v=12"></script>
+<script src="data/borders-fr.js?v=12"></script>
+<script src="data/borders.js?v=12"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>

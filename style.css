@@ -19,6 +19,12 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* Règle générale de masquage. Elle manquait : `.hidden` n'était défini que
+   pour quelques composants précis (.screen, .chrono, .slider-row…), donc
+   masquer n'importe quel autre bloc depuis le JS n'avait aucun effet — d'où
+   le sélecteur de joueurs qui restait affiché en solo. */
+.hidden { display: none !important; }
+
 html, body {
   height: 100%;
   margin: 0;
@@ -158,6 +164,31 @@ body {
 
 /* ---------- Entraînement libre ---------- */
 .explore-hint { flex: 0 0 auto; padding: 10px 16px calc(16px + var(--safe-bottom)); margin: 0; }
+
+/* Sélecteur de territoire (métropole / DOM) */
+.cadre-row {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 16px 10px;
+  scrollbar-width: none;
+}
+.cadre-row::-webkit-scrollbar { display: none; }
+.cadre-row.hidden { display: none; }
+.cadre-btn {
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: .85rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.cadre-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .choice.module { align-items: center; text-align: center; padding: 22px 16px; }
 .choice.module .emo { font-size: 2.4rem; }
 .choice.module .lbl { font-size: 1.15rem; }
@@ -177,6 +208,26 @@ body {
 .fiche img { width: 54px; height: 36px; object-fit: contain; border-radius: 4px; background: var(--surface-2); }
 .fiche .nom { font-weight: 700; font-size: 1rem; display: block; }
 .fiche .cap { color: var(--muted); font-size: .84rem; }
+.fiche .num-dep {
+  flex: 0 0 auto;
+  min-width: 48px; padding: 8px 6px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 1.05rem; font-weight: 800;
+  text-align: center;
+}
+
+/* Mode annoncé mais pas encore jouable */
+.choice.bientot { opacity: .5; cursor: default; }
+.choice.bientot::after {
+  content: "Bientôt";
+  margin-top: 6px;
+  font-size: .7rem; font-weight: 700;
+  letter-spacing: .8px; text-transform: uppercase;
+  color: var(--muted);
+}
 
 /* ---------- Barre de progression ---------- */
 .progress {

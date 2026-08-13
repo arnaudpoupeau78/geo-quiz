@@ -38,8 +38,21 @@
 
   /* Continent réellement affiché pour la question en cours : le continent
      choisi, sauf en « Monde entier » où l'on cadre sur celui du pays. */
-  const contEffectif = () =>
-    partie.cont.id === "monde" ? parId[tour.pays.cont] : partie.cont;
+  const contEffectif = () => {
+    // Module France : on cadre sur le territoire du département (métropole
+    // ou DOM), sinon la Guyane obligerait à afficher un demi-globe.
+    if (partie && partie.module === "france") {
+      const num = tour && tour.dep ? tour.dep.num : null;
+      return CADRES_FR.find((c) => c.id === "fr-" + num) || CADRES_FR[0];
+    }
+    return partie.cont.id === "monde" ? parId[tour.pays.cont] : partie.cont;
+  };
+
+  // Jeu de contours et boîtes correspondant au module en cours.
+  const bordsJeu = () => (partie && partie.module === "france" ? BORDS_FR : BORDS);
+  const boitesJeu = () => (partie && partie.module === "france" ? BBOX_FR : BBOX);
+  const cleCourante = () => (estFrance() ? tour.dep.num : tour.pays.iso);
+  const nomCourant = () => (estFrance() ? tour.dep.n : tour.pays.n);
 
   /* Sur la carte, la règle est BINAIRE et identique pour tous les niveaux :
      le clic est dans le pays, ou il ne l'est pas. Il y avait avant une marge
@@ -241,10 +254,12 @@
      le plus proche de la frontière (et ce point, pour tracer le trait).
      Projection équirectangulaire locale : l'erreur est négligeable devant
      les marges de tolérance, et c'est instantané. */
-  function distanceAuPays(lng, lat, iso) {
-    const multi = BORDS[iso];
+  function distanceAuPays(lng, lat, iso, source) {
+    const multi = (source || BORDS)[iso];
     if (!multi) return null;
-    const x = normLng(lng);
+    // Les contours des départements sont déjà dans le bon repère : seul le
+    // monde a besoin d'être ramené dans [-180, 180].
+    const x = source ? lng : normLng(lng);
     if (dansMulti(x, lat, multi)) return { dist: 0, dedans: true, pt: [x, lat] };
 
     const ky = 110.574;
@@ -288,14 +303,15 @@
   /* Pays le plus proche d'un clic tombé sur l'eau, dans la limite donnée.
      Sert à l'aperçu de sélection, pour qu'il montre exactement ce que la
      notation retiendra. */
-  function paysLePlusProche(lng, lat, maxKm) {
-    const x = normLng(lng);
+  function paysLePlusProche(lng, lat, maxKm, source, boites) {
+    const src = source || BORDS, bb = boites || BBOX;
+    const x = source ? lng : normLng(lng);
     const d = maxKm / 100 + 0.1;
     let meilleur = null;
-    for (const iso of Object.keys(BORDS)) {
-      const b = BBOX[iso];
+    for (const iso of Object.keys(src)) {
+      const b = bb[iso];
       if (x < b[0] - d || x > b[2] + d || lat < b[1] - d || lat > b[3] + d) continue;
-      const r = distanceAuPays(lng, lat, iso);
+      const r = distanceAuPays(lng, lat, iso, src);
       if (r && r.dist <= maxKm && (!meilleur || r.dist < meilleur.dist)) {
         meilleur = { iso, dist: r.dist };
       }
@@ -305,14 +321,15 @@
 
   /* Un autre pays est-il plus proche du clic que celui visé ? Sert à ne pas
      offrir un clic en mer à un pays quand le voisin est plus près. */
-  function unAutrePaysPlusProche(lng, lat, distCible, isoCible) {
-    const x = normLng(lng);
+  function unAutrePaysPlusProche(lng, lat, distCible, isoCible, source, boites) {
+    const src = source || BORDS, bb = boites || BBOX;
+    const x = source ? lng : normLng(lng);
     const d = 0.4; // ~40 km de marge sur la boîte englobante
-    for (const iso of Object.keys(BORDS)) {
+    for (const iso of Object.keys(src)) {
       if (iso === isoCible) continue;
-      const b = BBOX[iso];
+      const b = bb[iso];
       if (x < b[0] - d || x > b[2] + d || lat < b[1] - d || lat > b[3] + d) continue;
-      const r = distanceAuPays(lng, lat, iso);
+      const r = distanceAuPays(lng, lat, iso, src);
       if (r && r.dist < distCible) return true;
     }
     return false;
@@ -343,8 +360,8 @@
   //  Gestion des écrans
   // ============================================================
 
-  const ECRANS = ["module", "mode", "explore", "players", "continent", "difficulty",
-                  "pass", "capital", "flag", "map", "review", "end", "board"];
+  const ECRANS = ["module", "mode", "explore", "players", "continent", "submode",
+                  "difficulty", "pass", "capital", "flag", "map", "review", "end", "board"];
 
   function showScreen(id) {
     // Quitter une étape chronométrée doit arrêter le compte à rebours, sinon
@@ -433,7 +450,19 @@
 
   /* Construit la manche : les mêmes pays ET les mêmes grilles de drapeaux
      pour tout le monde, sinon le multijoueur ne serait pas équitable. */
+  /* Manche du module France : une région (ou toutes), et un sous-mode qui
+     décide de ce qu'on demande. Deux étapes seulement — il n'y a pas de
+     drapeau pour un département. */
+  function construireMancheFrance(region) {
+    const pool = region.id === "toutes"
+      ? FR.departements.slice()
+      : FR.departements.filter((d) => d.r === region.id);
+    const tirage = shuffle(pool).slice(0, Math.min(nbQuestions, pool.length));
+    return tirage.map((dep) => ({ dep }));
+  }
+
   function construireManche(cont, diff) {
+    if (moduleChoisi === "france") return construireMancheFrance(cont);
     const pool = poolPays(cont.id, diff.maxLvl);
     const voulu = nbQuestions;
     // Sans ce plafond, demander 20 questions sur un continent qui n'a que
@@ -444,7 +473,7 @@
 
   function nouvellePartie(cont, diff, manche) {
     partie = {
-      mode: modeChoisi, cont, diff,
+      mode: modeChoisi, module: moduleChoisi, sousMode: sousModeChoisi, cont, diff,
       manche: manche || construireManche(cont, diff),
       joueurs: (modeChoisi === "solo" ? ["Toi"] : nomsJoueurs.slice(0, nbJoueurs))
         .map((nom) => ({ nom, score: 0, resultats: [] })),
@@ -467,21 +496,42 @@
 
   $("passStart").addEventListener("click", demarrerTour);
 
+  // Nombre d'étapes du tour : 3 pour un pays, 2 pour un département — il n'y
+  // a pas de drapeau à deviner pour la Gironde.
+  const nbEtapes = () => (partie.module === "france" ? 2 : 3);
+  const estFrance = () => partie.module === "france";
+
   function demarrerTour() {
     const q = partie.manche[partie.idx];
     tour = {
       pays: q.pays,
+      dep: q.dep,
       options: q.options,
       capitale: { saisie: "", ok: false, fautes: null, marge: null },
       drapeau: { choix: null, ok: false },
       carte: { latlng: null, dist: null, ok: false },
     };
 
-    // Précharge les 6 drapeaux pendant que le joueur tape la capitale.
-    tour.options.forEach((p) => { new Image().src = flagUrl(p.iso, 320); });
-
     majEntetes();
-    $("capitalCountry").textContent = q.pays.n;
+
+    if (estFrance()) {
+      const parNum = partie.sousMode === "parNumero";
+      $("capitalLabel").textContent = parNum
+        ? "Quel département porte le numéro" : "Quel est le numéro du département";
+      $("capitalCountry").textContent = parNum ? q.dep.num : q.dep.n;
+      $("capitalInput").placeholder = parNum ? "Écris le nom du département…" : "Écris le numéro…";
+      // Un numéro se tape au pavé numérique, mais 2A et 2B contiennent une
+      // lettre : on reste sur un clavier texte et on guide avec inputmode.
+      $("capitalInput").setAttribute("inputmode", parNum ? "text" : "text");
+    } else {
+      $("capitalLabel").textContent = "Quelle est la capitale de";
+      $("capitalCountry").textContent = q.pays.n;
+      $("capitalInput").placeholder = "Écris la capitale…";
+      $("capitalInput").setAttribute("inputmode", "text");
+      // Précharge les 6 drapeaux pendant que le joueur tape la capitale.
+      tour.options.forEach((p) => { new Image().src = flagUrl(p.iso, 320); });
+    }
+
     $("capitalInput").value = "";
     showScreen("capital");
     $("capitalInput").focus();
@@ -493,15 +543,22 @@
     ["progressCapital", "progressFlag", "progressMap"].forEach((id) => { $(id).textContent = txt; });
 
     const prefixe = partie.mode === "multi" ? `${joueurCourant().nom} · ` : "";
-    $("titleCapital").textContent = prefixe + "Étape 1/3 · Capitale";
-    $("titleFlag").textContent = prefixe + "Étape 2/3 · Drapeau";
-    $("titleMap").textContent = prefixe + "Étape 3/3 · Carte";
+    const n = nbEtapes();
+    if (estFrance()) {
+      const quoi = partie.sousMode === "parNumero" ? "Nom" : "Numéro";
+      $("titleCapital").textContent = `${prefixe}Étape 1/${n} · ${quoi}`;
+      $("titleMap").textContent = `${prefixe}Étape 2/${n} · Carte`;
+    } else {
+      $("titleCapital").textContent = `${prefixe}Étape 1/${n} · Capitale`;
+      $("titleFlag").textContent = `${prefixe}Étape 2/${n} · Drapeau`;
+      $("titleMap").textContent = `${prefixe}Étape 3/${n} · Carte`;
+    }
 
     const base = partie.idx / partie.manche.length;
-    const pas = 1 / partie.manche.length / 3;
+    const pas = 1 / partie.manche.length / n;
     $("progressBar1").style.width = ((base + pas) * 100).toFixed(1) + "%";
     $("progressBar2").style.width = ((base + pas * 2) * 100).toFixed(1) + "%";
-    $("progressBar3").style.width = ((base + pas * 3) * 100).toFixed(1) + "%";
+    $("progressBar3").style.width = ((base + pas * n) * 100).toFixed(1) + "%";
   }
 
   /* Leurres de drapeaux : ressemblants en Difficile (même « famille » :
@@ -536,8 +593,28 @@
   });
   $("capitalSkip").addEventListener("click", () => validerCapitale(""));
 
+  /* Numéro de département : on ignore les zéros de tête et la casse, pour que
+     « 1 », « 01 » et « 2a » passent tous. Aucune tolérance aux fautes en
+     revanche — un numéro est soit le bon, soit un autre département. */
+  const normNum = (s) => String(s).trim().toUpperCase().replace(/\s+/g, "").replace(/^0+(?=\d)/, "");
+
+  function jugerDepartement(saisie, dep, sousMode) {
+    if (!saisie.trim()) return { ok: false, fautes: null, marge: null, autre: null };
+    if (sousMode === "parNumero") {
+      // On demande le NOM : même tolérance orthographique que les capitales.
+      return jugerCapitale(saisie, { c: dep.n }, partie.diff);
+    }
+    return { ok: normNum(saisie) === normNum(dep.num), fautes: null, marge: null, autre: null };
+  }
+
   function validerCapitale(saisie) {
     $("capitalInput").blur();
+    if (estFrance()) {
+      const j = jugerDepartement(saisie, tour.dep, partie.sousMode);
+      tour.capitale = { saisie: saisie.trim(), ok: j.ok, fautes: j.fautes, marge: j.marge, autre: j.autre };
+      afficherCarte();          // pas d'étape drapeau pour un département
+      return;
+    }
     const j = jugerCapitale(saisie, tour.pays, partie.diff);
     tour.capitale = { saisie: saisie.trim(), ok: j.ok, fautes: j.fautes, marge: j.marge, autre: j.autre };
     afficherDrapeaux();
@@ -638,13 +715,53 @@
     return meilleur || { lat: cy, lng: cx };
   }
 
+  const FR_PAR_NUM = {};
+  const BBOX_FR = {}, AIRE_FR = {};
+
   if (FR && BORDS_FR) {
     FR.departements.forEach((d) => {
       const pt = pointInterieur(BORDS_FR[d.num]);
       d.lat = pt.lat;
       d.lng = pt.lng;
+      FR_PAR_NUM[d.num] = d;
+
+      let x1 = 180, x2 = -180, y1 = 90, y2 = -90;
+      for (const poly of BORDS_FR[d.num]) for (const anneau of poly) for (const [x, y] of anneau) {
+        if (x < x1) x1 = x; if (x > x2) x2 = x;
+        if (y < y1) y1 = y; if (y > y2) y2 = y;
+      }
+      BBOX_FR[d.num] = [x1, y1, x2, y2];
+      AIRE_FR[d.num] = (x2 - x1) * (y2 - y1);
     });
   }
+
+  /* Quel département se trouve sous ce point ? Même logique que paysSous :
+     boîte englobante en filtre rapide, puis test exact, et on garde le plus
+     petit en cas de chevauchement. */
+  function departementSous(lng, lat) {
+    if (!BORDS_FR) return null;
+    let trouve = null;
+    for (const num of Object.keys(BORDS_FR)) {
+      const b = BBOX_FR[num];
+      if (lng < b[0] || lng > b[2] || lat < b[1] || lat > b[3]) continue;
+      if (!dansMulti(lng, lat, BORDS_FR[num])) continue;
+      if (!trouve || AIRE_FR[num] < AIRE_FR[trouve]) trouve = num;
+    }
+    return trouve;
+  }
+
+  /* Cadres de la carte de France. Les DOM sont à des milliers de kilomètres
+     de la métropole : les afficher ensemble donnerait un planisphère où la
+     Corrèze fait un pixel. On propose donc un cadre par territoire, et on
+     bascule de l'un à l'autre — plus honnête que de faux encarts collés. */
+  const CADRES_FR = [
+    { id: "fr-metro", nom: "Métropole",   court: "Métropole", bounds: [[41.3, -5.4], [51.2, 9.7]] },
+    { id: "fr-971",   nom: "Guadeloupe",  court: "971",       bounds: [[15.8, -61.9], [16.55, -60.95]] },
+    { id: "fr-972",   nom: "Martinique",  court: "972",       bounds: [[14.35, -61.3], [14.95, -60.75]] },
+    { id: "fr-973",   nom: "Guyane",      court: "973",       bounds: [[2.0, -54.7], [5.85, -51.5]] },
+    { id: "fr-974",   nom: "La Réunion",  court: "974",       bounds: [[-21.45, 55.15], [-20.85, 55.9]] },
+    { id: "fr-976",   nom: "Mayotte",     court: "976",       bounds: [[-13.05, 44.95], [-12.6, 45.35]] },
+  ];
 
   /* Point d'accroche d'une étiquette : le centre du PLUS GROS morceau du pays,
      jamais le centre de sa boîte englobante. Les États-Unis vont des Aléoutiennes
@@ -671,25 +788,47 @@
   /* Étiquettes des pays, dessinées par nos soins puisqu'il n'y a plus de
      tuiles. On n'affiche que les pays assez larges à l'écran (sinon les noms
      se chevauchent) et seulement ceux réellement dans la vue. */
-  function majEtiquettes(map, cont, groupe, avecCapitale) {
+  function majEtiquettes(map, cont, groupe, avecDetail, source) {
     groupe.clearLayers();
     const vue = map.getBounds();
     const ouest = cont.bounds[0][1], est = cont.bounds[1][1];
     const pxParDegre = (256 * Math.pow(2, map.getZoom())) / 360;
-    Object.keys(BORDS).forEach((iso) => {
-      const p = paysParIso[iso];
-      if (!p) return;
-      const a = ANCRE_ETIQ[iso];
-      if (a.largeur * pxParDegre < 46) return;
-      const centre = L.latLng(a.lat, lngDansFenetre(a.lng, ouest, est));
+
+    const cles = source ? source.cles : Object.keys(BORDS);
+    const seuil = source ? source.seuil : 46;
+    cles.forEach((cle) => {
+      const info = source
+        ? source.info(cle)
+        : (() => {
+            const p = paysParIso[cle];
+            if (!p) return null;
+            const a = ANCRE_ETIQ[cle];
+            return { lat: a.lat, lng: a.lng, largeur: a.largeur,
+                     titre: p.n, detail: p.c };
+          })();
+      if (!info) return;
+      if (info.largeur * pxParDegre < seuil) return;
+      const centre = L.latLng(info.lat, lngDansFenetre(info.lng, ouest, est));
       if (!vue.contains(centre)) return;
-      const contenu = avecCapitale
-        ? `<b>${echapper(p.n)}</b><i>${echapper(p.c)}</i>`
-        : `<b>${echapper(p.n)}</b>`;
+      const contenu = avecDetail
+        ? `<b>${echapper(info.titre)}</b><i>${echapper(info.detail)}</i>`
+        : `<b>${echapper(info.titre)}</b>`;
       L.tooltip({ permanent: true, direction: "center", className: "etiquette-pays", opacity: 1 })
         .setLatLng(centre).setContent(contenu).addTo(groupe);
     });
   }
+
+  // Source d'étiquettes pour les départements : nom en titre, numéro dessous.
+  const SOURCE_FR = () => ({
+    cles: Object.keys(BORDS_FR),
+    seuil: 34,
+    info: (num) => {
+      const d = FR_PAR_NUM[num];
+      if (!d) return null;
+      const b = BBOX_FR[num];
+      return { lat: d.lat, lng: d.lng, largeur: b[2] - b[0], titre: d.n, detail: num };
+    },
+  });
 
   /* ---------- Fond de carte dessiné ----------
      Plus aucune tuile : on trace nous-mêmes les contours déjà chargés.
@@ -710,13 +849,14 @@
      instance entre la carte de question et celle de correction la faisait
      sauter de l'une à l'autre — d'où des corrections affichées au mauvais
      endroit du globe. */
-  function fondDeCarte(cont, usage) {
+  function fondDeCarte(cont, usage, bords) {
+    const source = bords || BORDS;
     const cle = usage + ":" + cont.id;
     if (cacheFond[cle]) return cacheFond[cle];
-    const traits = Object.keys(BORDS).map((iso) => ({
+    const traits = Object.keys(source).map((iso) => ({
       type: "Feature",
       properties: { iso },
-      geometry: { type: "MultiPolygon", coordinates: coordsFenetre(BORDS[iso], cont) },
+      geometry: { type: "MultiPolygon", coordinates: coordsFenetre(source[iso], cont) },
     }));
     cacheFond[cle] = L.geoJSON(
       { type: "FeatureCollection", features: traits },
@@ -732,21 +872,41 @@
     });
   }
 
-  // Recale un jeu de coordonnées dans la fenêtre du continent affiché.
+  /* Recale un jeu de coordonnées dans la fenêtre du continent affiché.
+
+     Le décalage est calculé UNE SEULE FOIS par morceau, à partir du centre de
+     son anneau extérieur, puis appliqué tel quel à tous ses points. Décaler
+     chaque point indépendamment cassait les morceaux à cheval sur le bord de
+     la fenêtre : sur la carte d'Europe, un point de la Russie à 170° E partait
+     à −190° pendant que ses voisins restaient à 30° E, et l'anneau traversait
+     la carte de part en part — d'où les bandes horizontales. */
   function coordsFenetre(multi, cont) {
     const ouest = cont.bounds[0][1], est = cont.bounds[1][1];
-    return multi.map((poly) => poly.map((anneau) =>
-      anneau.map(([x, y]) => [lngDansFenetre(x, ouest, est), y])));
+    return multi.map((poly) => {
+      let x1 = Infinity, x2 = -Infinity;
+      poly[0].forEach(([x]) => { x1 = Math.min(x1, x); x2 = Math.max(x2, x); });
+      const centre = (x1 + x2) / 2;
+      const decalage = lngDansFenetre(centre, ouest, est) - centre;
+      if (decalage === 0) return poly;
+      return poly.map((anneau) => anneau.map(([x, y]) => [x + decalage, y]));
+    });
   }
 
   function afficherCarte() {
-    $("mapCountry").textContent = tour.pays.n;
+    const fr = estFrance();
+    $("mapCountry").textContent = fr
+      ? (partie.sousMode === "parNumero" ? tour.dep.num : tour.dep.n)
+      : tour.pays.n;
     $("mapValidate").disabled = true;
-    $("mapHint").textContent = "Touche le pays. Pince pour zoomer.";
+    $("mapHint").textContent = fr
+      ? "Touche le département. Pince pour zoomer."
+      : "Touche le pays. Pince pour zoomer.";
     // En « Monde entier », on annonce le continent affiché : la carte se cadre
     // dessus, autant l'assumer plutôt que de laisser deviner.
-    $("mapContinent").textContent =
-      partie.cont.id === "monde" ? `${contEffectif().emoji} ${contEffectif().nom}` : "";
+    // En France, on annonce le territoire dès qu'on sort de la métropole.
+    $("mapContinent").textContent = fr
+      ? (contEffectif().id === "fr-metro" ? "" : `🌴 ${contEffectif().nom}`)
+      : (partie.cont.id === "monde" ? `${contEffectif().emoji} ${contEffectif().nom}` : "");
 
     if (!LEAFLET_OK) {
       $("mapHint").textContent = "Carte indisponible (hors-ligne au premier lancement).";
@@ -788,7 +948,7 @@
 
     // Le fond dépend du continent affiché (les longitudes sont recalées dans
     // sa fenêtre), donc on échange la couche à chaque question.
-    const fond = fondDeCarte(contEffectif(), "quiz");
+    const fond = fondDeCarte(contEffectif(), "quiz", bordsJeu());
     if (quizFond !== fond) {
       if (quizFond) quizMap.removeLayer(quizFond);
       fond.addTo(quizMap);
@@ -899,7 +1059,10 @@
      Le nom du pays n'est évidemment jamais affiché ici. */
   function montrerSelection(latlng) {
     quizSel.clearLayers();
-    let iso = paysSous(latlng.lng, latlng.lat);
+    const src = bordsJeu(), boites = boitesJeu();
+    let iso = estFrance()
+      ? departementSous(latlng.lng, latlng.lat)
+      : paysSous(latlng.lng, latlng.lat);
     let auLarge = false;
 
     // Tombé sur l'eau : on désigne la côte la plus proche, exactement comme
@@ -907,7 +1070,9 @@
     // affichait « tu as touché la mer » alors que le clic allait être compté
     // bon — l'aperçu doit dire la vérité.
     if (!iso) {
-      const proche = paysLePlusProche(latlng.lng, latlng.lat, MARGE_COTE_KM);
+      const proche = estFrance()
+        ? paysLePlusProche(latlng.lng, latlng.lat, MARGE_COTE_KM, src, boites)
+        : paysLePlusProche(latlng.lng, latlng.lat, MARGE_COTE_KM);
       if (proche) { iso = proche.iso; auLarge = true; }
     }
 
@@ -917,17 +1082,17 @@
       return;
     }
 
-    const coords = coordsFenetre(BORDS[iso], contEffectif());
+    const coords = coordsFenetre(src[iso], contEffectif());
     L.geoJSON(
       { type: "Feature", geometry: { type: "MultiPolygon", coordinates: coords } },
       { style: { color: "#0f7a4f", weight: 2, fillColor: "#3ddc97", fillOpacity: 0.55 },
         interactive: false }
     ).addTo(quizSel);
 
-    // Un micro-État colorié reste invisible : on le cercle pour qu'on sache
-    // qu'on l'a bien attrapé.
-    const bb = BBOX[iso];
-    if (Math.max(bb[2] - bb[0], bb[3] - bb[1]) < 3) {
+    // Un territoire minuscule colorié reste invisible : on le cercle pour
+    // qu'on sache qu'on l'a bien attrapé.
+    const bb = boites[iso];
+    if (Math.max(bb[2] - bb[0], bb[3] - bb[1]) < (estFrance() ? 0.4 : 3)) {
       L.circleMarker(latlng, {
         radius: 10, color: "#0f7a4f", weight: 3,
         fillColor: "#3ddc97", fillOpacity: 0.35, interactive: false,
@@ -935,20 +1100,24 @@
     }
     $("mapHint").textContent = auLarge
       ? "Au large : c'est la côte la plus proche qui compte. Re-clique pour changer."
-      : "Pays sélectionné. Re-clique pour changer.";
+      : `${estFrance() ? "Département sélectionné" : "Pays sélectionné"}. Re-clique pour changer.`;
   }
 
   $("mapValidate").addEventListener("click", () => {
     if (!tour.carte.latlng) return;
     const p = tour.pays;
     const ll = tour.carte.latlng;
+    const fr = estFrance();
+    const src = fr ? BORDS_FR : null;
+    const cible = cleCourante();
 
-    const res = distanceAuPays(ll.lng, ll.lat, p.iso);
+    const res = distanceAuPays(ll.lng, ll.lat, cible, src);
     if (res) {
       tour.carte.dist = res.dist;
       tour.carte.dedans = res.dedans;
       tour.carte.ptBord = res.pt;
-      tour.carte.paysClique = res.dedans ? p.iso : paysSous(ll.lng, ll.lat);
+      tour.carte.paysClique = res.dedans ? cible
+        : (fr ? departementSous(ll.lng, ll.lat) : paysSous(ll.lng, ll.lat));
     } else {
       // Repli si le contour manque (n'arrive plus : les 189 en ont un).
       const a = ancrePlusProche(ll.lat, ll.lng, p);
@@ -963,7 +1132,8 @@
     tour.carte.cote = !tour.carte.dedans &&
       tour.carte.paysClique === null &&
       tour.carte.dist <= MARGE_COTE_KM &&
-      !unAutrePaysPlusProche(ll.lng, ll.lat, tour.carte.dist, p.iso);
+      !unAutrePaysPlusProche(ll.lng, ll.lat, tour.carte.dist, cible,
+                             src, fr ? BBOX_FR : null);
     tour.carte.ok = tour.carte.dedans || tour.carte.cote;
     afficherCorrection();
   });
@@ -978,42 +1148,59 @@
   // ============================================================
 
   function afficherCorrection() {
+    const fr = estFrance();
     const p = tour.pays;
     const j = joueurCourant();
-    const points = (tour.capitale.ok ? 1 : 0) + (tour.drapeau.ok ? 1 : 0) + (tour.carte.ok ? 1 : 0);
+    const n = nbEtapes();
+    const points = (tour.capitale.ok ? 1 : 0) + (fr ? 0 : tour.drapeau.ok ? 1 : 0) +
+                   (tour.carte.ok ? 1 : 0);
     j.score += points;
 
     const noteCapitale = texteNoteCapitale();
     const noteCarte = texteNoteCarte();
+    // En France, ce qu'on demandait et ce qu'on attendait dépendent du
+    // sous-mode : par numéro on veut le nom, par nom on veut le numéro.
+    const titre = fr ? `${tour.dep.num} · ${tour.dep.n}` : p.n;
+    const attendu = fr
+      ? (partie.sousMode === "parNumero" ? tour.dep.n : tour.dep.num)
+      : p.c;
+    const libelleEtape = fr
+      ? (partie.sousMode === "parNumero" ? "Nom du département" : "Numéro")
+      : "Capitale";
 
     j.resultats.push({
-      pays: p.n, iso: p.iso, capitaleVraie: p.c,
+      pays: titre, iso: fr ? null : p.iso, capitaleVraie: attendu,
       capitale: tour.capitale.ok, capitaleSaisie: tour.capitale.saisie, noteCapitale,
+      libelleEtape, sansDrapeau: fr,
       drapeau: tour.drapeau.ok,
       drapeauChoisiIso: tour.drapeau.choix ? tour.drapeau.choix.iso : null,
       drapeauChoisiNom: tour.drapeau.choix ? tour.drapeau.choix.n : null,
       carte: tour.carte.ok, noteCarte,
     });
 
-    $("reviewCountry").textContent = p.n;
-    $("reviewScore").textContent = `+${points}/3`;
+    $("reviewCountry").textContent = titre;
+    $("reviewScore").textContent = `+${points}/${n}`;
 
-    // --- Capitale ---
+    // --- Étape texte (capitale, ou nom/numéro de département) ---
     $("cardCapital").className = "card " + (tour.capitale.ok ? "ok" : "ko");
+    $("capitalCardTitle").textContent = libelleEtape;
     $("capitalVerdict").textContent = tour.capitale.ok ? "✅" : "❌";
     const donnee = $("capitalGiven");
     donnee.textContent = tour.capitale.saisie || "Pas de réponse";
     donnee.className = "compare-value" + (tour.capitale.saisie ? "" : " empty");
-    $("capitalTruth").textContent = p.c;
+    $("capitalTruth").textContent = attendu;
     $("capitalNote").textContent = noteCapitale;
 
-    // --- Drapeau ---
-    $("cardFlag").className = "card " + (tour.drapeau.ok ? "ok" : "ko");
-    $("flagVerdict").textContent = tour.drapeau.ok ? "✅" : "❌";
-    remplirSlot($("flagGiven"), tour.drapeau.choix);
-    remplirSlot($("flagTruth"), p);
-    $("flagGivenName").textContent = tour.drapeau.choix ? tour.drapeau.choix.n : "—";
-    $("flagTruthName").textContent = p.n;
+    // --- Drapeau : sans objet pour un département ---
+    $("cardFlag").classList.toggle("hidden", fr);
+    if (!fr) {
+      $("cardFlag").className = "card " + (tour.drapeau.ok ? "ok" : "ko");
+      $("flagVerdict").textContent = tour.drapeau.ok ? "✅" : "❌";
+      remplirSlot($("flagGiven"), tour.drapeau.choix);
+      remplirSlot($("flagTruth"), p);
+      $("flagGivenName").textContent = tour.drapeau.choix ? tour.drapeau.choix.n : "—";
+      $("flagTruthName").textContent = p.n;
+    }
 
     // --- Carte ---
     const indispo = !!tour.carte.indispo;
@@ -1054,8 +1241,9 @@
     const c = tour.carte;
     if (c.indispo) return "Étape passée (carte indisponible).";
     if (!c.latlng) return "Pas de réponse.";
-    if (c.dedans) return "Dans le pays 🎯";
-    if (c.cote) return "Sur la côte du pays 🎯";
+    const quoi = estFrance() ? "le département" : "le pays";
+    if (c.dedans) return `Dans ${quoi} 🎯`;
+    if (c.cote) return `Sur la côte ${estFrance() ? "du département" : "du pays"} 🎯`;
     return `Raté — à ${formatDistance(c.dist)} de la frontière`;
   }
 
@@ -1064,9 +1252,12 @@
     if (c.indispo || !c.latlng) return "";
     if (c.dedans) return "";
     if (c.cote) return `Tombé sur l'eau à ${formatDistance(c.dist)} de la côte — compté bon.`;
-    return c.paysClique && c.paysClique !== tour.pays.iso
-      ? `Tu as cliqué sur : ${nomParIso[c.paysClique] || c.paysClique.toUpperCase()}.`
-      : c.paysClique ? "" : "Tu as cliqué en mer.";
+    if (!c.paysClique) return "Tu as cliqué en mer.";
+    if (c.paysClique === cleCourante()) return "";
+    const nom = estFrance()
+      ? (FR_PAR_NUM[c.paysClique] ? `${c.paysClique} · ${FR_PAR_NUM[c.paysClique].n}` : c.paysClique)
+      : (nomParIso[c.paysClique] || c.paysClique.toUpperCase());
+    return `Tu as cliqué sur : ${nom}.`;
   }
 
   function remplirSlot(slot, pays) {
@@ -1105,12 +1296,12 @@
       // Les noms sont recalculés à chaque déplacement : n'afficher que ce qui
       // tient à l'écran évite la bouillie de texte quand on dézoome.
       revMap.on("zoomend moveend", () => {
-        majEtiquettes(revMap, contEffectif(), revEtiq, false);
+        majEtiquettes(revMap, contEffectif(), revEtiq, false, estFrance() ? SOURCE_FR() : null);
       });
     }
     revCouches.clearLayers();
 
-    const fondRev = fondDeCarte(contEffectif(), "review");
+    const fondRev = fondDeCarte(contEffectif(), "review", bordsJeu());
     if (revFond !== fondRev) {
       if (revFond) revMap.removeLayer(revFond);
       fondRev.addTo(revMap);
@@ -1120,11 +1311,13 @@
 
     const p = tour.pays;
     const cont = contEffectif();
+    const src = bordsJeu();
+    const cle = cleCourante();
     let bounds = null;
 
-    // Le bon pays, colorié en vert.
-    if (BORDS[p.iso]) {
-      const coords = coordsFenetre(BORDS[p.iso], cont);
+    // La bonne réponse, coloriée en vert.
+    if (src[cle]) {
+      const coords = coordsFenetre(src[cle], cont);
       L.geoJSON(
         { type: "Feature", geometry: { type: "MultiPolygon", coordinates: coords } },
         { style: { color: "#0f7a4f", weight: 2, fillColor: "#3ddc97", fillOpacity: 0.45 } }
@@ -1136,9 +1329,12 @@
       const principal = coords.reduce((a, b) => (b[0].length > a[0].length ? b : a));
       bounds = L.latLngBounds(principal[0].map(([x, y]) => [y, x]));
 
-      // Un pays minuscule ne se voit pas, même colorié : on ajoute une pastille.
-      const bb = BBOX[p.iso];
-      if (Math.max(bb[2] - bb[0], bb[3] - bb[1]) < 3) {
+      // Un territoire minuscule ne se voit pas, même colorié : on ajoute une
+      // pastille. Le seuil est plus fin pour les départements, qui sont tous
+      // petits à l'échelle d'un degré.
+      const bb = boitesJeu()[cle];
+      const seuil = estFrance() ? 0.4 : 3;
+      if (Math.max(bb[2] - bb[0], bb[3] - bb[1]) < seuil) {
         L.circleMarker(bounds.getCenter(), {
           radius: 11, color: "#0f7a4f", weight: 3, fillColor: "#3ddc97", fillOpacity: 0.5,
         }).addTo(revCouches);
@@ -1165,7 +1361,7 @@
     const cadrer = () => {
       revMap.invalidateSize();
       revMap.fitBounds(bounds.pad(0.25), { padding: [18, 18], maxZoom: 7, animate: false });
-      majEtiquettes(revMap, contEffectif(), revEtiq, false);
+      majEtiquettes(revMap, contEffectif(), revEtiq, false, estFrance() ? SOURCE_FR() : null);
     };
     cadrer();
     setTimeout(cadrer, 180);
@@ -1192,15 +1388,16 @@
   /* Libellé du bouton de la correction : en multi il annonce qui prend la
      main, sinon on ne sait pas s'il faut passer le téléphone. */
   function texteBoutonSuivant() {
+    const suivant = estFrance() ? "Département suivant →" : "Pays suivant →";
     if (partie.mode === "solo") {
-      return partie.idx + 1 >= partie.manche.length ? "Voir le résultat →" : "Pays suivant →";
+      return partie.idx + 1 >= partie.manche.length ? "Voir le résultat →" : suivant;
     }
     if (partie.jIdx + 1 < partie.joueurs.length) {
       return `Au tour ${deNom(partie.joueurs[partie.jIdx + 1].nom)} →`;
     }
     return partie.idx + 1 >= partie.manche.length
       ? "Voir le classement 🏆"
-      : `Pays suivant · au tour ${deNom(partie.joueurs[0].nom)} →`;
+      : `${estFrance() ? "Département" : "Pays"} suivant · au tour ${deNom(partie.joueurs[0].nom)} →`;
   }
 
   // ============================================================
@@ -1227,22 +1424,31 @@
 
   // Écran de fin de manche : solo uniquement. En multi, la dernière question
   // du dernier joueur enchaîne directement sur le classement.
+  // Clés de record : le module France n'a pas de difficulté, c'est le
+  // sous-mode qui joue ce rôle.
+  const cleGroupe = () => (estFrance() ? "fr-" + partie.cont.id : partie.cont.id);
+  const cleVariante = () => (estFrance() ? partie.sousMode : partie.diff.id);
+
+  const sousTitrePartie = () => estFrance()
+    ? `${partie.cont.nom} · ${partie.sousMode === "parNumero" ? "Trouver par numéro" : "Trouver par nom"}`
+    : `${partie.cont.nom} · ${partie.diff.nom}`;
+
   function finJoueur() {
     const j = joueurCourant();
-    const total = partie.manche.length * 3;
+    const total = partie.manche.length * nbEtapes();
     const pct = j.score / total;
-    const record = ecrireRecord(partie.cont.id, partie.diff.id, j.score, total);
+    const record = ecrireRecord(cleGroupe(), cleVariante(), j.score, total);
 
     $("endMark").textContent = pct >= 0.9 ? "🏆" : pct >= 0.6 ? "🎉" : pct >= 0.3 ? "💪" : "🌱";
     $("endTitle").textContent = record ? "Nouveau record !" : "Manche terminée";
-    $("endSub").textContent = `${partie.cont.nom} · ${partie.diff.nom}`;
+    $("endSub").textContent = sousTitrePartie();
     $("endScore").textContent = `${j.score}/${total}`;
 
     const nb = (k) => j.resultats.filter((r) => r[k]).length;
-    $("endDetail").textContent =
-      `🏛️ ${nb("capitale")}/${partie.manche.length}   ` +
-      `🚩 ${nb("drapeau")}/${partie.manche.length}   ` +
-      `📍 ${nb("carte")}/${partie.manche.length}`;
+    const n = partie.manche.length;
+    $("endDetail").textContent = estFrance()
+      ? `📝 ${nb("capitale")}/${n}   📍 ${nb("carte")}/${n}`
+      : `🏛️ ${nb("capitale")}/${n}   🚩 ${nb("drapeau")}/${n}   📍 ${nb("carte")}/${n}`;
 
     construireRecap(j.resultats, $("endList"));
     remplirActionsFin();
@@ -1261,20 +1467,23 @@
       const row = document.createElement("button");
       row.type = "button";
       row.className = "end-row";
+      const marques = r.sansDrapeau
+        ? `${r.capitale ? "✅" : "❌"}${r.carte ? "✅" : "❌"}`
+        : `${r.capitale ? "✅" : "❌"}${r.drapeau ? "✅" : "❌"}${r.carte ? "✅" : "❌"}`;
       row.innerHTML =
         `<span class="name">${echapper(r.pays)}</span>` +
-        `<span class="marks">${r.capitale ? "✅" : "❌"}${r.drapeau ? "✅" : "❌"}${r.carte ? "✅" : "❌"}</span>` +
+        `<span class="marks">${marques}</span>` +
         `<span class="chevron">▾</span>`;
 
       const detail = document.createElement("div");
       detail.className = "end-detail hidden";
       detail.innerHTML =
-        ligneDetail("🏛️", "Capitale", r.capitale,
+        ligneDetail(r.sansDrapeau ? "📝" : "🏛️", r.libelleEtape || "Capitale", r.capitale,
           r.capitaleSaisie ? echapper(r.capitaleSaisie) : "<i>pas de réponse</i>",
           echapper(r.capitaleVraie), r.noteCapitale) +
-        ligneDetail("🚩", "Drapeau", r.drapeau,
+        (r.sansDrapeau ? "" : ligneDetail("🚩", "Drapeau", r.drapeau,
           r.drapeauChoisiNom ? echapper(r.drapeauChoisiNom) : "<i>aucun choix</i>",
-          echapper(r.pays), "") +
+          echapper(r.pays), "")) +
         ligneDetail("📍", "Emplacement", r.carte, "", "", r.noteCarte || (r.carte ? "Bien placé." : ""));
 
       row.addEventListener("click", () => {
@@ -1317,11 +1526,13 @@
       zone.appendChild(b);
     };
 
-    bouton("Rejouer (nouveaux pays)", "primary", () =>
+    const fr = estFrance();
+    bouton(fr ? "Rejouer (nouveaux départements)" : "Rejouer (nouveaux pays)", "primary", () =>
       nouvellePartie(partie.cont, partie.diff));
     bouton("Rejouer la même série", "ghost", () =>
       nouvellePartie(partie.cont, partie.diff, partie.manche));
-    bouton("Changer de continent", "ghost", () => showScreen("continent"));
+    bouton(fr ? "Changer de région" : "Changer de continent", "ghost", () =>
+      fr ? afficherRegions() : showScreen("continent"));
   }
 
   // ============================================================
@@ -1329,8 +1540,8 @@
   // ============================================================
 
   function afficherClassement() {
-    const total = partie.manche.length * 3;
-    $("boardSub").textContent = `${partie.cont.nom} · ${partie.diff.nom} · ${partie.manche.length} pays`;
+    const total = partie.manche.length * nbEtapes();
+    $("boardSub").textContent = `${sousTitrePartie()} · ${partie.manche.length} ${estFrance() ? "départements" : "pays"}`;
 
     const classes = partie.joueurs.slice().sort((a, b) => b.score - a.score);
     const liste = $("boardList");
@@ -1356,7 +1567,9 @@
       row.innerHTML =
         `<span class="board-rank">${medaille}</span>` +
         `<span class="board-name">${echapper(j.nom)}</span>` +
-        `<span class="board-detail">🏛️${nb("capitale")} 🚩${nb("drapeau")} 📍${nb("carte")}</span>` +
+        `<span class="board-detail">${estFrance()
+            ? `📝${nb("capitale")} 📍${nb("carte")}`
+            : `🏛️${nb("capitale")} 🚩${nb("drapeau")} 📍${nb("carte")}`}</span>` +
         `<span class="board-score">${j.score}<small>/${total}</small></span>` +
         `<span class="chevron">▾</span>`;
 
@@ -1384,14 +1597,25 @@
   //  Écrans d'accueil
   // ============================================================
 
-  $("moduleMonde").addEventListener("click", () => showScreen("mode"));
+  let moduleChoisi = "monde";
+
+  $("moduleMonde").addEventListener("click", () => {
+    moduleChoisi = "monde";
+    $("modeTitle").textContent = "🌍 Géographie du Monde";
+    $("modeSolo").classList.remove("bientot");
+    $("modeMulti").classList.remove("bientot");
+    showScreen("mode");
+  });
 
   $("moduleFrance").addEventListener("click", () => {
-    const n = FR ? FR.departements.length : 0;
-    $("franceSub").textContent =
-      `Données prêtes (${n} départements, contours et préfectures). ` +
-      "Les écrans de jeu arrivent au prochain lot.";
-    $("moduleFrance").classList.add("bientot");
+    if (!FR || !BORDS_FR) return;
+    moduleChoisi = "france";
+    $("modeTitle").textContent = "🇫🇷 Départements Français";
+    // Les quiz France arrivent au prochain lot : on l'annonce sur le bouton
+    // plutôt que d'ouvrir un écran qui ne saurait pas jouer.
+    $("modeSolo").classList.remove("bientot");
+    $("modeMulti").classList.remove("bientot");
+    showScreen("mode");
   });
 
   $("modeLibre").addEventListener("click", ouvrirEntrainement);
@@ -1444,30 +1668,49 @@
   // ---------- Entraînement libre ----------
 
   let exploreMap = null, exploreEtiq = null, exploreFond = null, exploreSel = null;
+  let cadreCourant = null;   // cadre France affiché, null en module Monde
   const CONT_MONDE = () => DATA.continents.find((c) => c.id === "monde");
 
-  function ouvrirEntrainement() {
-    showScreen("explore");
+  // Cadre et jeu de contours à utiliser selon le module choisi.
+  const cadreExplore = () =>
+    moduleChoisi === "france" ? (cadreCourant || CADRES_FR[0]) : CONT_MONDE();
+  const bordsExplore = () => (moduleChoisi === "france" ? BORDS_FR : BORDS);
 
-    if (!exploreMap) {
-      exploreMap = L.map("exploreMap", {
-        zoomControl: true, attributionControl: false,
-        worldCopyJump: false, zoomSnap: 0, maxBoundsViscosity: 1,
+  function construireCadresFrance() {
+    const zone = $("exploreCadres");
+    zone.classList.toggle("hidden", moduleChoisi !== "france");
+    if (moduleChoisi !== "france") return;
+    zone.innerHTML = "";
+    CADRES_FR.forEach((c) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "cadre-btn" + (c.id === cadreExplore().id ? " active" : "");
+      b.textContent = c.nom;
+      b.addEventListener("click", () => {
+        cadreCourant = c;
+        exploreMap.closePopup();
+        exploreSel.clearLayers();
+        construireCadresFrance();
+        rebrancherFondExplore();
       });
-      exploreFond = fondDeCarte(CONT_MONDE(), "explore");
-      exploreFond.addTo(exploreMap);
-      exploreEtiq = L.layerGroup().addTo(exploreMap);
-      exploreSel = L.layerGroup().addTo(exploreMap);
+      zone.appendChild(b);
+    });
+  }
 
-      exploreMap.on("zoomend moveend", majEtiquettesLibre);
-      exploreMap.on("click", (e) => montrerFiche(e.latlng));
+  function rebrancherFondExplore() {
+    const cadre = cadreExplore();
+    const fond = fondDeCarte(cadre, "explore", bordsExplore());
+    if (exploreFond !== fond) {
+      if (exploreFond) exploreMap.removeLayer(exploreFond);
+      fond.addTo(exploreMap);
+      fond.bringToBack();
+      exploreFond = fond;
     }
-
     const cadrer = () => {
       exploreMap.invalidateSize();
       exploreMap.setMinZoom(0);
       exploreMap.setMaxBounds(null);
-      exploreMap.fitBounds(L.latLngBounds(CONT_MONDE().bounds), { padding: [2, 2], animate: false });
+      exploreMap.fitBounds(L.latLngBounds(cadre.bounds), { padding: [2, 2], animate: false });
       const z = exploreMap.getZoom();
       exploreMap.setMinZoom(z);
       exploreMap.setMaxZoom(z + 5);
@@ -1478,10 +1721,39 @@
     setTimeout(cadrer, 180);
   }
 
+  function ouvrirEntrainement() {
+    const fr = moduleChoisi === "france";
+    $("explorePermanentSub").textContent = fr
+      ? "Noms et numéros directement sur la carte"
+      : "Noms et capitales directement sur la carte";
+    $("exploreHint").textContent = fr
+      ? "Touche un département pour voir son numéro et sa préfecture."
+      : "Touche un pays pour voir sa capitale et son drapeau.";
+    if (fr && !cadreCourant) cadreCourant = CADRES_FR[0];
+
+    showScreen("explore");
+
+    if (!exploreMap) {
+      exploreMap = L.map("exploreMap", {
+        zoomControl: true, attributionControl: false,
+        worldCopyJump: false, zoomSnap: 0, maxBoundsViscosity: 1,
+      });
+      exploreEtiq = L.layerGroup().addTo(exploreMap);
+      exploreSel = L.layerGroup().addTo(exploreMap);
+
+      exploreMap.on("zoomend moveend", majEtiquettesLibre);
+      exploreMap.on("click", (e) => montrerFiche(e.latlng));
+    }
+
+    construireCadresFrance();
+    rebrancherFondExplore();
+  }
+
   function majEtiquettesLibre() {
     if (!exploreMap) return;
     if (!$("explorePermanent").checked) { exploreEtiq.clearLayers(); return; }
-    majEtiquettes(exploreMap, CONT_MONDE(), exploreEtiq, true);
+    majEtiquettes(exploreMap, cadreExplore(), exploreEtiq, true,
+                  moduleChoisi === "france" ? SOURCE_FR() : null);
   }
 
   $("explorePermanent").addEventListener("change", majEtiquettesLibre);
@@ -1489,31 +1761,44 @@
   /* Fiche d'un pays : nom, capitale, drapeau. Le pays touché est surligné,
      comme pendant le quiz, pour qu'on sache de qui on parle. */
   function montrerFiche(latlng) {
-    let iso = paysSous(latlng.lng, latlng.lat);
-    if (!iso) {
-      const proche = paysLePlusProche(latlng.lng, latlng.lat, MARGE_COTE_KM);
-      if (proche) iso = proche.iso;
-    }
     exploreSel.clearLayers();
-    if (!iso) { exploreMap.closePopup(); return; }
+    const cadre = cadreExplore();
 
-    const p = paysParIso[iso];
+    let cle, contenu;
+    if (moduleChoisi === "france") {
+      cle = departementSous(latlng.lng, latlng.lat);
+      if (!cle) { exploreMap.closePopup(); return; }
+      const d = FR_PAR_NUM[cle];
+      contenu =
+        `<div class="fiche">` +
+        `<span class="num-dep">${echapper(d.num)}</span>` +
+        `<span><span class="nom">${echapper(d.n)}</span>` +
+        `<span class="cap">🏛️ ${echapper(d.p)}</span></span></div>`;
+    } else {
+      cle = paysSous(latlng.lng, latlng.lat);
+      if (!cle) {
+        const proche = paysLePlusProche(latlng.lng, latlng.lat, MARGE_COTE_KM);
+        if (proche) cle = proche.iso;
+      }
+      if (!cle) { exploreMap.closePopup(); return; }
+      const p = paysParIso[cle];
+      contenu =
+        `<div class="fiche">` +
+        `<img src="${flagUrl(p.iso, 320)}" alt="" onerror="this.remove()">` +
+        `<span><span class="nom">${echapper(p.n)}</span>` +
+        `<span class="cap">🏛️ ${echapper(p.c)}</span></span></div>`;
+    }
+
     L.geoJSON(
       { type: "Feature",
-        geometry: { type: "MultiPolygon", coordinates: coordsFenetre(BORDS[iso], CONT_MONDE()) } },
+        geometry: { type: "MultiPolygon",
+                    coordinates: coordsFenetre(bordsExplore()[cle], cadre) } },
       { style: { color: "#0f7a4f", weight: 2, fillColor: "#3ddc97", fillOpacity: 0.5 },
         interactive: false }
     ).addTo(exploreSel);
 
     L.popup({ closeButton: true, autoPan: true, maxWidth: 260 })
-      .setLatLng(latlng)
-      .setContent(
-        `<div class="fiche">` +
-        `<img src="${flagUrl(p.iso, 320)}" alt="" onerror="this.remove()">` +
-        `<span><span class="nom">${echapper(p.n)}</span>` +
-        `<span class="cap">🏛️ ${echapper(p.c)}</span></span></div>`
-      )
-      .openOn(exploreMap);
+      .setLatLng(latlng).setContent(contenu).openOn(exploreMap);
   }
 
   $("modeMulti").addEventListener("click", () => {
@@ -1537,9 +1822,12 @@
     $("questionCount").value = nbQuestions;
     $("questionCountVal").textContent = nbQuestions;
 
+    const fr = moduleChoisi === "france";
+    const quoi = fr ? "départements" : "pays";
+    $("titreNbQuestions").textContent = fr ? "Combien de départements ?" : "Combien de pays ?";
     $("questionHint").textContent = modeChoisi === "multi"
-      ? `${nbQuestions} pays × ${nbJoueurs} joueurs = ${nbQuestions * nbJoueurs} tours de jeu.`
-      : `${nbQuestions} pays, soit un score sur ${nbQuestions * 3}.`;
+      ? `${nbQuestions} ${quoi} × ${nbJoueurs} joueurs = ${nbQuestions * nbJoueurs} tours de jeu.`
+      : `${nbQuestions} ${quoi}, soit un score sur ${nbQuestions * (fr ? 2 : 3)}.`;
     majReglageChrono();
 
     const noms = $("playerNames");
@@ -1570,7 +1858,69 @@
     afficherContinents();
   });
 
+  let sousModeChoisi = "parNumero";
+  let regionChoisie = null;
+
+  const REGION_TOUTES = { id: "toutes", nom: "Toutes les régions", emoji: "🇫🇷" };
+
+  /* Module France : l'écran « continent » sert à choisir la région. Même
+     écran, mêmes gestes — seule la liste change. */
+  function afficherRegions() {
+    $("continentTitre").textContent = "Choisis une région";
+    const grille = $("continentList");
+    grille.innerHTML = "";
+    [REGION_TOUTES].concat(FR.regions).forEach((r) => {
+      const nb = r.id === "toutes"
+        ? FR.departements.length
+        : FR.departements.filter((d) => d.r === r.id).length;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "choice";
+      btn.innerHTML =
+        `<span class="emo">${r.emoji}</span>` +
+        `<span class="lbl">${r.nom}</span>` +
+        `<span class="sub">${nb} départements</span>`;
+      btn.addEventListener("click", () => choisirRegion(r));
+      grille.appendChild(btn);
+    });
+    showScreen("continent");
+  }
+
+  function choisirRegion(r) {
+    regionChoisie = r;
+    contChoisi = r;
+    $("submodeTitle").textContent = `${r.emoji} ${r.nom}`;
+
+    const zone = $("bestScoresFr");
+    zone.innerHTML = "";
+    if (modeChoisi === "solo") {
+      [["parNumero", "Trouver par numéro"], ["parNom", "Trouver par nom"]].forEach(([id, nom]) => {
+        const b = lireRecord("fr-" + r.id, id);
+        if (b) {
+          const l = document.createElement("div");
+          l.textContent = `🏅 Record ${nom} : ${b.score}/${b.total}`;
+          zone.appendChild(l);
+        }
+      });
+    }
+    showScreen("submode");
+  }
+
+  /* Le module France n'a pas d'échelle de difficulté, mais le moteur en
+     attend une (tolérance orthographique, libellés, rejeu). On lui en fournit
+     une explicite plutôt que `null`, qui faisait planter le juge de saisie. */
+  const DIFF_FRANCE = { id: "fr", nom: "Départements", fautes: "normale", maxLvl: 3, leurres: "melange" };
+
+  const lancerFrance = (sm) => {
+    sousModeChoisi = sm;
+    nouvellePartie(regionChoisie, DIFF_FRANCE);
+  };
+  $("subParNumero").addEventListener("click", () => lancerFrance("parNumero"));
+  $("subParNom").addEventListener("click", () => lancerFrance("parNom"));
+
   function afficherContinents() {
+    if (moduleChoisi === "france") { afficherRegions(); return; }
+    $("continentTitre").textContent = "Choisis un continent";
     const grille = $("continentList");
     grille.innerHTML = "";
     DATA.continents.forEach((c) => {
@@ -1627,9 +1977,12 @@
       const cible = btn.getAttribute("data-back");
       if (cible === "quit") {
         if (partie && partie.idx > 0 && !confirm("Abandonner la manche en cours ?")) return;
+        if (moduleChoisi === "france") { showScreen("submode"); return; }
         showScreen(contChoisi ? "difficulty" : "continent");
       } else if (cible === "depuisContinent") {
         showScreen("players");
+      } else if (cible === "continent" && moduleChoisi === "france") {
+        afficherRegions();
       } else {
         showScreen(cible);
       }

@@ -19,12 +19,25 @@ fait 10 pays, notés sur 30.
 L'app s'ouvre sur le choix du terrain de jeu :
 
 - **🌍 Géographie du Monde** — 189 pays, capitale / drapeau / emplacement.
-- **🇫🇷 Départements Français** — 101 départements. **En cours de construction**
-  (étape 2). Les contours sont validés et disponibles (source `france-geojson`,
-  DOM inclus, 3 635 Ko ramenés à 218 Ko), il reste à écrire les préfectures et
-  les régions, puis les deux sous-modes de quiz.
+- **🇫🇷 Départements Français** — 101 départements, DOM compris. Solo,
+  multijoueur et entraînement libre, avec choix de la région et deux
+  sous-modes :
+  - **Trouver par numéro** : on donne `33`, tu écris « Gironde », puis tu le
+    places sur la carte ;
+  - **Trouver par nom** : on donne « Gironde », tu écris `33`, puis la carte.
 
-## Les trois modes du module Monde
+  Deux étapes par département, donc **2 points** — il n'y a pas de drapeau à
+  deviner pour la Gironde. Les zéros de tête sont ignorés (`1`, `01`), et
+  `2a`/`2A` passent tous les deux ; en revanche aucune tolérance aux fautes sur
+  un numéro, c'est le bon ou c'en est un autre. Sur le nom, même indulgence
+  orthographique que sur les capitales.
+
+  **Métropole et DOM sont sur des cadres séparés**, jamais mélangés : ils sont
+  à des milliers de kilomètres, une carte commune donnerait un planisphère où
+  la Corrèze fait un pixel. En quiz, le cadre suit le département demandé et
+  l'annonce sous la question.
+
+## Les trois modes, communs aux deux modules
 
 - **Solo** — ton meilleur score est gardé par continent et par difficulté.
   En fin de manche : récapitulatif dépliable (touche un pays pour revoir tes
