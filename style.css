@@ -452,6 +452,37 @@ body {
   text-shadow: 0 1px 3px #05090f, 0 0 2px #05090f;
 }
 .etiquette-pays::before { display: none; }
+/* Macaron de région : volontairement discret, il ne doit ni masquer un
+   département ni intercepter le clic. */
+/* Le marqueur n'a pas de taille : c'est le macaron qu'il contient qui est
+   centré sur le point, par transform. */
+.macaron-ancre { width: 0 !important; height: 0 !important; overflow: visible; }
+.macaron-region {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: block;
+  background: rgba(12, 20, 33, .72);
+  border: 1px solid rgba(143, 216, 255, .35);
+  border-radius: 999px;
+  box-shadow: none;
+  padding: 3px 9px;
+  color: #b9cbe4;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity .2s ease, color .2s ease, border-color .2s ease;
+}
+.macaron-region::before { display: none; }
+.macaron-region.actif {
+  color: #eaf6ff;
+  border-color: rgba(143, 216, 255, .9);
+  background: rgba(20, 44, 66, .9);
+}
+.macaron-region.estompe { opacity: .35; }
+
 .etiquette-pays b { display: block; font-weight: 650; }
 .etiquette-pays i { display: block; font-style: normal; font-size: 9px; color: #9fb0c6; }
 

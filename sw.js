@@ -12,19 +12,20 @@
 
    Pense à incrémenter CACHE_VERSION à chaque déploiement. */
 
-const CACHE_VERSION = "geo-quiz-v12";
+const CACHE_VERSION = "geo-quiz-v14";
 const CACHE_APP = CACHE_VERSION + "-app";
 const CACHE_EXT = CACHE_VERSION + "-ext";
 
 const FICHIERS_APP = [
   "./",
   "./index.html",
-  "./style.css?v=12",
-  "./app.js?v=12",
-  "./data/countries.js?v=12",
-  "./data/borders.js?v=12",
-  "./data/departements.js?v=12",
-  "./data/borders-fr.js?v=12",
+  "./style.css?v=14",
+  "./app.js?v=14",
+  "./data/countries.js?v=14",
+  "./data/borders.js?v=14",
+  "./data/departements.js?v=14",
+  "./data/borders-fr.js?v=14",
+  "./data/regions-fr.js?v=14",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

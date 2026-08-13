@@ -18,7 +18,7 @@
 
   <!-- Leaflet (mis en cache par le service worker pour le mode hors-ligne) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="style.css?v=12">
+  <link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 
@@ -87,6 +87,8 @@
   <!-- Métropole et DOM : un cadre par territoire, ils sont trop éloignés
        pour tenir sur une même carte lisible. -->
   <div class="cadre-row hidden" id="exploreCadres"></div>
+  <!-- Mise en avant d'une région : les autres départements sont estompés. -->
+  <div class="cadre-row hidden" id="exploreRegions"></div>
 
   <div id="exploreMap" class="map"></div>
   <p class="map-hint explore-hint" id="exploreHint">Touche un pays pour voir sa capitale et son drapeau.</p>
@@ -355,10 +357,11 @@
 </section>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="data/countries.js?v=12"></script>
-<script src="data/departements.js?v=12"></script>
-<script src="data/borders-fr.js?v=12"></script>
-<script src="data/borders.js?v=12"></script>
-<script src="app.js?v=12"></script>
+<script src="data/countries.js?v=14"></script>
+<script src="data/departements.js?v=14"></script>
+<script src="data/borders-fr.js?v=14"></script>
+<script src="data/regions-fr.js?v=14"></script>
+<script src="data/borders.js?v=14"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

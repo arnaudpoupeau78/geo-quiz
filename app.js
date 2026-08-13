@@ -63,24 +63,40 @@
     {
       id: "facile", nom: "Facile", emoji: "🙂",
       sub: "Pays très connus · orthographe indulgente",
-      maxLvl: 1, leurres: "differents", fautes: "large",
+      niveau: 1, leurres: "differents", fautes: "large",
     },
     {
       id: "moyen", nom: "Moyen", emoji: "🤔",
-      sub: "Pays connus et moyens",
-      maxLvl: 2, leurres: "melange", fautes: "normale",
+      sub: "Pays moyennement connus · un quart de révisions",
+      niveau: 2, leurres: "melange", fautes: "normale",
     },
     {
       id: "difficile", nom: "Difficile", emoji: "🥵",
-      sub: "Tous les pays · drapeaux ressemblants · orthographe exacte",
-      maxLvl: 3, leurres: "proches", fautes: "stricte",
+      sub: "Pays pointus · drapeaux ressemblants · orthographe exacte",
+      niveau: 3, leurres: "proches", fautes: "stricte",
     },
     {
       id: "melange", nom: "Mélangé", emoji: "🎲",
-      sub: "Tous les niveaux tirés au hasard",
-      maxLvl: 3, leurres: "melange", fautes: "normale",
+      sub: "Tous les niveaux à parts égales",
+      niveau: null, leurres: "melange", fautes: "normale",
     },
   ];
+
+  /* Composition d'une manche selon la difficulté.
+
+     Les niveaux ne sont plus cumulatifs. Avant, « Moyen » en Asie tirait dans
+     les 37 pays de niveau 1 ET 2 : près de la moitié des questions étaient des
+     révisions de Facile, et changer de palier n'apportait presque rien.
+     Désormais le niveau choisi DOMINE, avec une minorité de révisions pour ne
+     pas oublier ce qu'on a appris — passer en Difficile ne doit pas faire
+     disparaître à jamais les pays des niveaux précédents. */
+  const PART_REVISION = 0.25;   // fraction tirée dans les niveaux inférieurs
+
+  /* Et un plancher, sinon certains viviers sont ridicules : l'Océanie n'a que
+     2 pays de niveau 1 et 2 de niveau 2, les Amériques 7 de niveau 3. Sous ce
+     seuil, on complète avec les niveaux voisins — les plus proches d'abord,
+     en descendant, puis en montant s'il n'y a rien en dessous. */
+  const PLANCHER_VIVIER = 12;
 
   const flagUrl = (iso, w) => `https://flagcdn.com/w${w || 320}/${iso}.png`;
   const nomParIso = {};
@@ -435,17 +451,55 @@
 
   const joueurCourant = () => partie.joueurs[partie.jIdx];
 
-  function poolPays(contId, maxLvl) {
+  /* Sépare les pays d'un continent en deux paquets pour une difficulté :
+     - `principal`   : le niveau visé, complété si le vivier est trop maigre ;
+     - `revision`    : les niveaux inférieurs restants.
+     En « Mélangé », tout part dans `principal` et il n'y a pas de révisions. */
+  function viviers(contId, diff) {
     const tous = DATA.pays[contId];
-    let lvl = maxLvl;
-    let pool = tous.filter((p) => p.lvl <= lvl);
-    // L'Océanie n'a que 2 pays de niveau 1 : on élargit plutôt que de faire
-    // tourner la même question en boucle.
-    while (pool.length < 8 && lvl < 3) {
-      lvl++;
-      pool = tous.filter((p) => p.lvl <= lvl);
+    if (!diff || diff.niveau === null) return { principal: tous.slice(), revision: [] };
+
+    const parNiveau = (n) => tous.filter((p) => p.lvl === n);
+    let principal = parNiveau(diff.niveau);
+    let revision = tous.filter((p) => p.lvl < diff.niveau);
+
+    if (principal.length < PLANCHER_VIVIER) {
+      // Niveaux les plus proches d'abord : on descend, puis on remonte.
+      const voisins = [];
+      for (let n = diff.niveau - 1; n >= 1; n--) voisins.push(n);
+      for (let n = diff.niveau + 1; n <= 3; n++) voisins.push(n);
+
+      for (const n of voisins) {
+        if (principal.length >= PLANCHER_VIVIER) break;
+        const dispo = shuffle(parNiveau(n).filter((p) => !principal.includes(p)));
+        const ajout = dispo.slice(0, PLANCHER_VIVIER - principal.length);
+        principal = principal.concat(ajout);
+        revision = revision.filter((p) => !ajout.includes(p));
+      }
     }
-    return pool;
+    return { principal, revision };
+  }
+
+  // Vivier total réellement jouable, pour l'afficher sur le bouton.
+  function poolPays(contId, diff) {
+    const v = viviers(contId, diff);
+    return v.principal.concat(v.revision);
+  }
+
+  /* Tirage d'une manche : trois quarts dans le niveau visé, un quart en
+     révision. Si l'un des deux paquets ne suffit pas, l'autre complète. */
+  function tirerPays(contId, diff, voulu) {
+    const { principal, revision } = viviers(contId, diff);
+    const total = Math.min(voulu, principal.length + revision.length);
+    let nbRevision = revision.length ? Math.round(total * PART_REVISION) : 0;
+    nbRevision = Math.min(nbRevision, revision.length);
+    let nbPrincipal = Math.min(principal.length, total - nbRevision);
+    nbRevision = Math.min(revision.length, total - nbPrincipal);
+
+    return shuffle(
+      shuffle(principal).slice(0, nbPrincipal)
+        .concat(shuffle(revision).slice(0, nbRevision))
+    );
   }
 
   /* Construit la manche : les mêmes pays ET les mêmes grilles de drapeaux
@@ -463,12 +517,10 @@
 
   function construireManche(cont, diff) {
     if (moduleChoisi === "france") return construireMancheFrance(cont);
-    const pool = poolPays(cont.id, diff.maxLvl);
-    const voulu = nbQuestions;
-    // Sans ce plafond, demander 20 questions sur un continent qui n'a que
-    // 14 pays reposerait forcément la même question.
-    const tirage = shuffle(pool).slice(0, Math.min(voulu, pool.length));
-    return tirage.map((pays) => ({ pays, options: optionsDrapeaux(pays, pool, diff) }));
+    // Le tirage est plafonné au vivier : demander 20 questions sur un
+    // continent qui n'a que 14 pays reposerait forcément la même question.
+    const tirage = tirerPays(cont.id, diff, nbQuestions);
+    return tirage.map((pays) => ({ pays, options: optionsDrapeaux(pays, null, diff) }));
   }
 
   function nouvellePartie(cont, diff, manche) {
@@ -668,8 +720,28 @@
   //  Étape 3 — la carte
   // ============================================================
 
-  let quizMap = null, quizSel = null, quizFond = null;
-  let revMap = null, revCouches = null, revFond = null, revEtiq = null;
+  let quizMap = null, quizSel = null, quizFond = null, quizReg = null, quizMac = null;
+  let revMap = null, revCouches = null, revFond = null, revEtiq = null, revReg = null;
+
+  /* Change la région mise en avant et rafraîchit tout ce qui en dépend.
+     Les couches de fond sont mises en cache : on ne les reconstruit pas, on
+     leur réapplique simplement leur style. */
+  function definirFocusRegion(id) {
+    regionFocus = id && id !== "toutes" ? id : null;
+    Object.values(cacheFond).forEach((c) => {
+      if (c.estFrance) c.setStyle(styleDepartement);
+    });
+    Object.values(cacheRegions).forEach((c) => c.setStyle(styleRegion));
+  }
+
+  // Pose (ou remplace) le calque des limites régionales sur une carte.
+  function brancherRegions(map, cadre, usage, ancienne) {
+    const couche = coucheRegions(cadre, usage);
+    if (!couche || couche === ancienne) return ancienne;
+    if (ancienne) map.removeLayer(ancienne);
+    couche.addTo(map);
+    return couche;
+  }
 
   const paysParIso = {};
   TOUS.forEach((p) => { paysParIso[p.iso] = p; });
@@ -680,6 +752,7 @@
 
   const FR = window.GEO_FRANCE || null;
   const BORDS_FR = window.GEO_BORDERS_FR || null;
+  const REG_FR = window.GEO_REGIONS_FR || null;
 
   /* Point de référence d'un département, garanti DANS son contour.
      On prend le centre de la boîte du plus gros morceau ; s'il tombe dehors
@@ -750,6 +823,19 @@
     return trouve;
   }
 
+  // Ancre et largeur de chaque région, pour poser son macaron au bon endroit.
+  const ANCRE_REG = {};
+  if (REG_FR) {
+    Object.keys(REG_FR).forEach((id) => {
+      const pt = pointInterieur(REG_FR[id]);
+      let x1 = 180, x2 = -180;
+      for (const poly of REG_FR[id]) for (const anneau of poly) for (const [x] of anneau) {
+        if (x < x1) x1 = x; if (x > x2) x2 = x;
+      }
+      ANCRE_REG[id] = { lat: pt.lat, lng: pt.lng, largeur: x2 - x1 };
+    });
+  }
+
   /* Cadres de la carte de France. Les DOM sont à des milliers de kilomètres
      de la métropole : les afficher ensemble donnerait un planisphère où la
      Corrèze fait un pixel. On propose donc un cadre par territoire, et on
@@ -818,6 +904,37 @@
     });
   }
 
+  /* Macarons des régions : discrets, non cliquables, et seulement quand la
+     région est assez large à l'écran. Ils n'apparaissent pas sur les cadres
+     d'outre-mer, où il n'y a qu'un département. */
+  function majMacaronsRegions(map, cadre, groupe) {
+    groupe.clearLayers();
+    if (!REG_FR || cadre.id !== "fr-metro") return;
+    const vue = map.getBounds();
+    const pxParDegre = (256 * Math.pow(2, map.getZoom())) / 360;
+    FR.regions.forEach((r) => {
+      const a = ANCRE_REG[r.id];
+      if (!a) return;
+      if (a.largeur * pxParDegre < 70) return;
+      const centre = L.latLng(a.lat, a.lng);
+      if (!vue.contains(centre)) return;
+      const actif = regionFocus === r.id;
+      const classes = "macaron-region" + (actif ? " actif" : "") +
+                      (regionFocus && !actif ? " estompe" : "");
+      // Marqueur et non tooltip : `clearLayers()` ne retirait pas toujours le
+      // conteneur d'un tooltip, et les macarons s'empilaient à chaque
+      // recadrage — 33 étiquettes à l'écran pour 13 régions.
+      L.marker(centre, {
+        interactive: false, keyboard: false,
+        icon: L.divIcon({
+          className: "macaron-ancre",
+          html: `<span class="${classes}">${echapper(r.nom)}</span>`,
+          iconSize: [0, 0],
+        }),
+      }).addTo(groupe);
+    });
+  }
+
   // Source d'étiquettes pour les départements : nom en titre, numéro dessous.
   const SOURCE_FR = () => ({
     cles: Object.keys(BORDS_FR),
@@ -842,6 +959,26 @@
     color: "#46586f", weight: 1, fillColor: "#1b2534", fillOpacity: 1,
   };
 
+  /* Effet de focus : quand une région est choisie, ses départements gardent
+     leur rendu net et les autres sont assombris. `regionFocus` vaut null en
+     module Monde et pour « Toutes les régions » — dans ce cas tout le monde
+     garde son opacité normale. */
+  let regionFocus = null;
+
+  const STYLE_FOCUS = {
+    color: "#7d93b3", weight: 1.2, fillColor: "#243350", fillOpacity: 1,
+  };
+  const STYLE_ESTOMPE = {
+    color: "#46586f", weight: 1, fillColor: "#1b2534",
+    fillOpacity: 0.35, opacity: 0.3,
+  };
+
+  function styleDepartement(feature) {
+    if (!regionFocus) return STYLE_TERRE;
+    const d = FR_PAR_NUM[feature.properties.iso];
+    return d && d.r === regionFocus ? STYLE_FOCUS : STYLE_ESTOMPE;
+  }
+
   const cacheFond = {};
 
   /* Le cache est indexé par (usage, continent) et pas seulement par continent :
@@ -858,11 +995,44 @@
       properties: { iso },
       geometry: { type: "MultiPolygon", coordinates: coordsFenetre(source[iso], cont) },
     }));
+    const estFr = source === BORDS_FR;
     cacheFond[cle] = L.geoJSON(
       { type: "FeatureCollection", features: traits },
-      { style: STYLE_TERRE, interactive: false, renderer: L.canvas({ padding: 0.3 }) }
+      { style: estFr ? styleDepartement : STYLE_TERRE,
+        interactive: false, renderer: L.canvas({ padding: 0.3 }) }
     );
+    cacheFond[cle].estFrance = estFr;
     return cacheFond[cle];
+  }
+
+  /* Contours des régions, tracés par-dessus les départements. Ils ne sont pas
+     cliquables : le clic doit continuer d'atteindre le département. */
+  const cacheRegions = {};
+
+  function coucheRegions(cadre, usage) {
+    if (!REG_FR) return null;
+    const cle = usage + ":" + cadre.id;
+    if (cacheRegions[cle]) return cacheRegions[cle];
+    const traits = Object.keys(REG_FR).map((id) => ({
+      type: "Feature",
+      properties: { id },
+      geometry: { type: "MultiPolygon", coordinates: coordsFenetre(REG_FR[id], cadre) },
+    }));
+    cacheRegions[cle] = L.geoJSON(
+      { type: "FeatureCollection", features: traits },
+      { style: styleRegion, interactive: false, renderer: L.canvas({ padding: 0.3 }) }
+    );
+    return cacheRegions[cle];
+  }
+
+  function styleRegion(feature) {
+    const active = regionFocus && feature.properties.id === regionFocus;
+    return {
+      color: active ? "#8fd8ff" : "#6f86a8",
+      weight: active ? 3 : 1.8,
+      opacity: regionFocus && !active ? 0.35 : 0.9,
+      fill: false,
+    };
   }
 
   function pin(classe) {
@@ -936,7 +1106,11 @@
       L.control.zoom({ position: "topright", zoomInTitle: "Zoomer", zoomOutTitle: "Dézoomer" })
         .addTo(quizMap);
       controleVueEnsemble().addTo(quizMap);
+      quizMac = L.layerGroup().addTo(quizMap);
       quizSel = L.layerGroup().addTo(quizMap);
+      quizMap.on("zoomend moveend", () => {
+        if (estFrance()) majMacaronsRegions(quizMap, contEffectif(), quizMac);
+      });
       quizMap.on("click", (e) => {
         tour.carte.latlng = e.latlng;
         montrerSelection(e.latlng);
@@ -952,9 +1126,20 @@
     if (quizFond !== fond) {
       if (quizFond) quizMap.removeLayer(quizFond);
       fond.addTo(quizMap);
-      fond.bringToBack();
       quizFond = fond;
     }
+
+    // Limites régionales par-dessus les départements, puis le fond tout en
+    // dessous : l'ordre compte, les deux couches partagent le même canvas.
+    if (estFrance()) {
+      quizReg = brancherRegions(quizMap, contEffectif(), "quiz", quizReg);
+    } else if (quizReg) {
+      quizMap.removeLayer(quizReg);
+      quizReg = null;
+    }
+    if (quizReg) quizReg.bringToBack();
+    quizFond.bringToBack();
+    quizMac.clearLayers();
 
     showScreen("map");
 
@@ -964,6 +1149,12 @@
     // appliqué donne une carte grise, sans aucune tuile.
     cadrerQuiz();
     setTimeout(cadrerQuiz, 180);
+    // Au tout premier affichage, la carte vient d'être créée et ses bornes ne
+    // sont pas encore stables : les macarons n'y trouvaient aucune région
+    // « dans la vue ». Une passe de plus règle ce cas de démarrage.
+    setTimeout(() => {
+      if (estFrance() && quizMac) majMacaronsRegions(quizMap, contEffectif(), quizMac);
+    }, 420);
     lancerChrono("chronoBar3", () => {
       tour.carte = { latlng: null, dist: null, ok: false };
       afficherCorrection();
@@ -1042,6 +1233,7 @@
     // Le garde-fou de déplacement est EXACTEMENT la vue obtenue : impossible
     // de dériver, et aucun conflit avec le cadrage qu'on vient de poser.
     quizMap.setMaxBounds(quizMap.getBounds().pad(0.02));
+    if (estFrance()) majMacaronsRegions(quizMap, cont, quizMac);
   }
 
   // Rotation du téléphone ou fenêtre redimensionnée : il faut recadrer,
@@ -1305,9 +1497,16 @@
     if (revFond !== fondRev) {
       if (revFond) revMap.removeLayer(revFond);
       fondRev.addTo(revMap);
-      fondRev.bringToBack();
       revFond = fondRev;
     }
+    if (estFrance()) {
+      revReg = brancherRegions(revMap, contEffectif(), "review", revReg);
+    } else if (revReg) {
+      revMap.removeLayer(revReg);
+      revReg = null;
+    }
+    if (revReg) revReg.bringToBack();
+    revFond.bringToBack();
 
     const p = tour.pays;
     const cont = contEffectif();
@@ -1601,6 +1800,7 @@
 
   $("moduleMonde").addEventListener("click", () => {
     moduleChoisi = "monde";
+    definirFocusRegion(null);
     $("modeTitle").textContent = "🌍 Géographie du Monde";
     $("modeSolo").classList.remove("bientot");
     $("modeMulti").classList.remove("bientot");
@@ -1668,6 +1868,7 @@
   // ---------- Entraînement libre ----------
 
   let exploreMap = null, exploreEtiq = null, exploreFond = null, exploreSel = null;
+  let exploreReg = null, exploreMac = null;
   let cadreCourant = null;   // cadre France affiché, null en module Monde
   const CONT_MONDE = () => DATA.continents.find((c) => c.id === "monde");
 
@@ -1691,7 +1892,33 @@
         exploreMap.closePopup();
         exploreSel.clearLayers();
         construireCadresFrance();
+        construireRegionsExplore();
         rebrancherFondExplore();
+      });
+      zone.appendChild(b);
+    });
+  }
+
+  /* Sélecteur de région en entraînement libre : c'est là qu'on choisit la
+     zone à mettre en avant, puisqu'aucune partie n'est en cours. Il n'a de
+     sens que sur la métropole — un cadre d'outre-mer ne contient qu'un seul
+     département. */
+  function construireRegionsExplore() {
+    const zone = $("exploreRegions");
+    const surMetro = moduleChoisi === "france" && cadreExplore().id === "fr-metro";
+    zone.classList.toggle("hidden", !surMetro);
+    if (!surMetro) return;
+    zone.innerHTML = "";
+    [REGION_TOUTES].concat(FR.regions.filter((r) => r.id !== "dom")).forEach((r) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      const actif = (regionFocus || "toutes") === r.id;
+      b.className = "cadre-btn" + (actif ? " active" : "");
+      b.textContent = r.id === "toutes" ? "Toutes" : r.nom;
+      b.addEventListener("click", () => {
+        definirFocusRegion(r.id);
+        construireRegionsExplore();
+        majEtiquettesLibre();
       });
       zone.appendChild(b);
     });
@@ -1703,9 +1930,16 @@
     if (exploreFond !== fond) {
       if (exploreFond) exploreMap.removeLayer(exploreFond);
       fond.addTo(exploreMap);
-      fond.bringToBack();
       exploreFond = fond;
     }
+    if (moduleChoisi === "france") {
+      exploreReg = brancherRegions(exploreMap, cadre, "explore", exploreReg);
+    } else if (exploreReg) {
+      exploreMap.removeLayer(exploreReg);
+      exploreReg = null;
+    }
+    if (exploreReg) exploreReg.bringToBack();
+    exploreFond.bringToBack();
     const cadrer = () => {
       exploreMap.invalidateSize();
       exploreMap.setMinZoom(0);
@@ -1738,6 +1972,7 @@
         zoomControl: true, attributionControl: false,
         worldCopyJump: false, zoomSnap: 0, maxBoundsViscosity: 1,
       });
+      exploreMac = L.layerGroup().addTo(exploreMap);
       exploreEtiq = L.layerGroup().addTo(exploreMap);
       exploreSel = L.layerGroup().addTo(exploreMap);
 
@@ -1746,11 +1981,14 @@
     }
 
     construireCadresFrance();
+    construireRegionsExplore();
     rebrancherFondExplore();
   }
 
   function majEtiquettesLibre() {
     if (!exploreMap) return;
+    if (moduleChoisi === "france") majMacaronsRegions(exploreMap, cadreExplore(), exploreMac);
+    else exploreMac.clearLayers();
     if (!$("explorePermanent").checked) { exploreEtiq.clearLayers(); return; }
     majEtiquettes(exploreMap, cadreExplore(), exploreEtiq, true,
                   moduleChoisi === "france" ? SOURCE_FR() : null);
@@ -1889,6 +2127,7 @@
   function choisirRegion(r) {
     regionChoisie = r;
     contChoisi = r;
+    definirFocusRegion(r.id);
     $("submodeTitle").textContent = `${r.emoji} ${r.nom}`;
 
     const zone = $("bestScoresFr");
@@ -1909,7 +2148,7 @@
   /* Le module France n'a pas d'échelle de difficulté, mais le moteur en
      attend une (tolérance orthographique, libellés, rejeu). On lui en fournit
      une explicite plutôt que `null`, qui faisait planter le juge de saisie. */
-  const DIFF_FRANCE = { id: "fr", nom: "Départements", fautes: "normale", maxLvl: 3, leurres: "melange" };
+  const DIFF_FRANCE = { id: "fr", nom: "Départements", fautes: "normale", niveau: null, leurres: "melange" };
 
   const lancerFrance = (sm) => {
     sousModeChoisi = sm;
@@ -1945,7 +2184,7 @@
     const grille = $("difficultyList");
     grille.innerHTML = "";
     DIFFICULTES.forEach((d) => {
-      const nb = poolPays(c.id, d.maxLvl).length;
+      const nb = poolPays(c.id, d).length;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "choice";

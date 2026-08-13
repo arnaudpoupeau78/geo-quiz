@@ -37,6 +37,21 @@ L'app s'ouvre sur le choix du terrain de jeu :
   la Corrèze fait un pixel. En quiz, le cadre suit le département demandé et
   l'annonce sous la question.
 
+  **Limites régionales et macarons.** Les contours des 13 régions
+  métropolitaines sont tracés par-dessus les départements, en trait plus épais,
+  et le nom de chaque région s'affiche dans un petit macaron — seulement si
+  elle est assez large à l'écran, et jamais cliquable : le tap doit continuer
+  d'atteindre le département. Les contours viennent d'un fichier dédié
+  ([`data/regions-fr.js`](data/regions-fr.js), 80 Ko) : impossible de les
+  déduire des départements sans une bibliothèque de fusion de polygones.
+
+  **Mise en avant de la région choisie.** Dès qu'une région est sélectionnée —
+  pour une partie ou depuis les pastilles de l'entraînement libre — ses
+  départements gardent un rendu net et légèrement éclairci, tandis que ceux des
+  autres régions tombent à 35 % d'opacité. Son contour et son macaron passent
+  en bleu clair. « Toutes les régions » rend son opacité normale à tout le
+  monde.
+
 ## Les trois modes, communs aux deux modules
 
 - **Solo** — ton meilleur score est gardé par continent et par difficulté.
@@ -210,13 +225,28 @@ pays en vert.
 
 ## Difficultés et continents
 
-Chaque pays porte un niveau de notoriété (1 à 3) dans `data/countries.js` :
+Chaque pays porte un niveau de notoriété (1 à 3) dans `data/countries.js`.
+Les niveaux **ne sont pas cumulatifs** : le niveau choisi domine le tirage, avec
+environ un quart de révisions puisées dans les niveaux inférieurs.
 
-- **Facile** : niveau 1 · **Moyen** : niveaux 1-2 · **Difficile** et
-  **Mélangé** : tous les niveaux.
-- *Difficile* et *Mélangé* tirent dans le même vivier ; ce qui change, c'est la
-  sévérité (marges serrées et leurres ressemblants pour Difficile, réglages
-  normaux pour Mélangé).
+| | Pays tirés | Leurres de drapeaux | Orthographe |
+|---|---|---|---|
+| 🙂 Facile | niveau 1 | on **évite** la même famille | 2 fautes, 3 au-delà de 10 lettres |
+| 🤔 Moyen | ~¾ niveau 2, ~¼ niveau 1 | au hasard | 1 faute, 2 au-delà de 10 lettres |
+| 🥵 Difficile | ~¾ niveau 3, ~¼ niveaux 1-2 | on **privilégie** la même famille | exacte, 1 faute au-delà de 10 lettres |
+| 🎲 Mélangé | tous, à parts égales | au hasard | comme Moyen |
+
+Les niveaux étaient cumulatifs auparavant : « Moyen » en Asie piochait dans les
+37 pays de niveaux 1 **et** 2, dont 16 déjà vus en Facile — près de la moitié
+des questions étaient des révisions, et changer de palier n'apportait presque
+rien. La part de révision est désormais minoritaire et voulue : passer en
+Difficile ne doit pas faire disparaître à jamais ce qu'on vient d'apprendre.
+
+**Plancher de vivier.** Certains niveaux sont trop maigres sur un continent :
+l'Océanie n'a que 2 pays de niveau 1 et 2 de niveau 2, les Amériques 7 de
+niveau 3. Sous 12 pays, le vivier est complété avec les niveaux voisins, les
+plus proches d'abord — sinon une manche de 10 questions en Océanie reposerait
+cinq fois l'Australie.
 
 Six terrains de jeu : Europe, Asie, Afrique, Amériques, Océanie et
 **Monde entier** (les 189 pays d'un coup).
@@ -226,9 +256,7 @@ un pixel. Elle se cadre sur **le continent du pays demandé**, et l'annonce sous
 la question. On part du principe que si tu connais le pays, tu sais sur quel
 continent il est ; en échange la carte reste cliquable.
 
-Si un continent n'a pas assez de pays à un niveau donné (l'Océanie n'a que
-2 pays de niveau 1), le vivier s'élargit automatiquement — le nombre réel est
-affiché sur chaque bouton.
+Le nombre réel de pays du vivier est affiché sur chaque bouton de difficulté.
 
 ## Modifier les données
 
