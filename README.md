@@ -178,6 +178,11 @@ construire le fond d'un continent, une seule fois puis mis en cache.
 Les **noms des pays** sont eux aussi dessinés par l'app, et n'apparaissent que
 lorsque le pays est assez large à l'écran — sinon les libellés se chevauchent.
 
+Les pays sont tracés **du plus grand au plus petit**. Natural Earth ne creuse
+pas les enclaves : le polygone de la France recouvre Monaco, celui de l'Italie
+le Vatican. Dessinés dans l'ordre du fichier, ces micro-États étaient repeints
+par leur voisin et restaient invisibles quel que soit le zoom.
+
 **Le zoom est autorisé, mais borné.** On ne peut pas dézoomer sous la vue du
 continent, ni zoomer au-delà de 3,5 niveaux (le fond se couvrirait de routes),
 ni faire glisser la carte hors du cadre de départ. Un bouton **⤢** ramène à la
@@ -216,12 +221,20 @@ la lagune de Venise et le détroit de Copenhague comme de l'eau. Un clic dans un
 La correction affiche **le pays que tu as réellement touché**, et colorie le bon
 pays en vert.
 
-> **Conséquence assumée :** 22 pays font moins de 2 pixels sur la carte de leur
-> continent (Monaco, Vatican, Malte, Nauru, Tuvalu, les atolls du Pacifique…).
-> Sur l'étape carte, ils relèvent de la loterie. 21 d'entre eux sont de
-> niveau 3 et n'apparaissent donc qu'en Difficile et Mélangé. **Singapour est
-> l'exception** : il est de niveau 1 et tombe donc aussi en Facile — passe-le en
-> `lvl: 2` dans `data/countries.js` si ça te gêne.
+**Micro-États : c'est le zoom qui règle le problème.** À l'échelle de l'Europe,
+le Vatican mesure 0,05 pixel et Monaco 0,25 : aucun doigt ne peut les viser. Le
+plafond de zoom était autrefois fixé à +3,5 niveaux pour empêcher les routes des
+tuiles d'apparaître ; les tuiles ayant disparu au profit de contours dessinés,
+cette raison n'existe plus. **Le plafond est donc à +10 niveaux** (16 au
+maximum absolu), ce qui porte le Vatican à 86 pixels et Monaco à 437. Le
+double-tap est activé et chaque pression sur `+` vaut 1,5 niveau, pour y
+arriver en quelques gestes.
+
+> Vise **la forme que tu vois**, pas l'endroit où tu sais que le pays se
+> trouve : les contours Natural Earth de Monaco et du Vatican sont des blocs
+> approximatifs, décalés de quelques centaines de mètres. Cliquer sur les
+> coordonnées réelles du Vatican rate de 1,2 km ; cliquer sur le carré affiché
+> tombe juste.
 
 ## Difficultés et continents
 
@@ -335,8 +348,9 @@ s'affichent à la place.
 - Multijoueur **local uniquement** (on se passe le téléphone). Jouer chacun
   depuis son appareil demanderait un serveur.
 - Les capitales sont saisies à la main : une erreur se corrige en une ligne.
-- 22 pays font moins de 2 pixels sur la carte de leur continent : l'étape carte
-  y est une loterie. C'est le prix de la règle binaire, assumé.
+- 22 pays font moins de 2 pixels au cadrage initial de leur continent : il faut
+  zoomer pour les atteindre. C'est faisable (le plafond monte à +10 niveaux),
+  mais ça demande quelques gestes de plus que pour le Brésil.
 - En multijoueur, la correction d'un pays s'affiche avant que le joueur suivant
   ne réponde au même pays. L'écran « passe le téléphone » la masque, mais rien
   n'empêche de regarder par-dessus l'épaule — c'est le principe du jeu à un

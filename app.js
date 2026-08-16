@@ -990,7 +990,23 @@
     const source = bords || BORDS;
     const cle = usage + ":" + cont.id;
     if (cacheFond[cle]) return cacheFond[cle];
-    const traits = Object.keys(source).map((iso) => ({
+
+    /* Ordre de dessin : les plus GRANDS d'abord, les plus petits par-dessus.
+       Natural Earth ne creuse pas les enclaves — le polygone de la France
+       recouvre Monaco, celui de l'Italie le Vatican. Dessinés dans l'ordre du
+       fichier, ces micro-États étaient repeints par leur voisin et restaient
+       invisibles quel que soit le zoom. */
+    const etendue = (iso) => {
+      let x1 = 180, x2 = -180, y1 = 90, y2 = -90;
+      for (const poly of source[iso]) for (const anneau of poly) for (const [x, y] of anneau) {
+        if (x < x1) x1 = x; if (x > x2) x2 = x;
+        if (y < y1) y1 = y; if (y > y2) y2 = y;
+      }
+      return (x2 - x1) * (y2 - y1);
+    };
+    const ordre = Object.keys(source).sort((a, b) => etendue(b) - etendue(a));
+
+    const traits = ordre.map((iso) => ({
       type: "Feature",
       properties: { iso },
       geometry: { type: "MultiPolygon", coordinates: coordsFenetre(source[iso], cont) },
@@ -1068,9 +1084,10 @@
       ? (partie.sousMode === "parNumero" ? tour.dep.num : tour.dep.n)
       : tour.pays.n;
     $("mapValidate").disabled = true;
+    // On rappelle le zoom sans jamais dire si CE pays-ci est petit.
     $("mapHint").textContent = fr
-      ? "Touche le département. Pince pour zoomer."
-      : "Touche le pays. Pince pour zoomer.";
+      ? "Touche le département. Pince ou double-tape pour zoomer."
+      : "Touche le pays. Pince ou double-tape pour zoomer.";
     // En « Monde entier », on annonce le continent affiché : la carte se cadre
     // dessus, autant l'assumer plutôt que de laisser deviner.
     // En France, on annonce le territoire dès qu'on sort de la métropole.
@@ -1097,10 +1114,15 @@
          devenu indispensable depuis que la validation est binaire.
          Le double-tap reste désactivé : il entrerait en conflit avec le tap
          qui sélectionne un pays. */
+      /* Double-tap actif : c'est le geste le plus rapide pour s'approcher, et
+         il ne gêne plus la sélection — le premier tap pose une sélection qui
+         n'est qu'un aperçu, remplaçable au tap suivant.
+         zoomDelta à 1,5 pour qu'un micro-État soit atteignable en quelques
+         pressions plutôt qu'une dizaine. */
       quizMap = L.map("quizMap", {
         zoomControl: false, dragging: true, touchZoom: true,
-        scrollWheelZoom: true, doubleClickZoom: false, boxZoom: false,
-        keyboard: false, worldCopyJump: false, zoomSnap: 0,
+        scrollWheelZoom: true, doubleClickZoom: true, boxZoom: false,
+        keyboard: false, worldCopyJump: false, zoomSnap: 0, zoomDelta: 1.5,
         maxBoundsViscosity: 1,
       });
       L.control.zoom({ position: "topright", zoomInTitle: "Zoomer", zoomOutTitle: "Dézoomer" })
@@ -1225,11 +1247,16 @@
     // niveau où on se trouvait.
     quizMap.fitBounds(L.latLngBounds(cont.bounds), { padding: [2, 2], animate: false });
 
-    // Bornes du zoom : on ne dézoome jamais sous la vue du continent, et on
-    // s'arrête avant que le fond de carte ne se couvre de routes.
+    /* Bornes du zoom. On ne dézoome jamais sous la vue du continent.
+       En haut, en revanche, le plafond était fixé à +3,5 pour éviter que les
+       tuiles ne se couvrent de routes — cette raison a disparu avec elles, les
+       contours dessinés restent nets à n'importe quelle échelle. Or il FAUT
+       monter très haut pour certains pays : à l'échelle de l'Europe, le
+       Vatican mesure 0,05 pixel et Monaco 0,25. Il leur faut respectivement
+       +9,7 et +7,3 niveaux pour devenir visables au doigt. */
     const z = quizMap.getZoom();
     quizMap.setMinZoom(z);
-    quizMap.setMaxZoom(z + 3.5);
+    quizMap.setMaxZoom(Math.min(z + 10, 16));
     // Le garde-fou de déplacement est EXACTEMENT la vue obtenue : impossible
     // de dériver, et aucun conflit avec le cadrage qu'on vient de poser.
     quizMap.setMaxBounds(quizMap.getBounds().pad(0.02));
